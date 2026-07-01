@@ -3,9 +3,10 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { BottomSheet } from '../components/Sheet';
-import { FIT_ITEMS, POT_ITEMS, POT_SKINS } from '../data/seed';
+import { FIT_ITEMS, POT_ITEMS, POT_SKINS, PREMIUM_ITEMS } from '../data/seed';
 import type { ShopItem } from '../data/types';
 import { useStore } from '../state/store';
+import { getInitData } from '../telegram/telegram';
 import { colors, fonts } from '../theme/tokens';
 import { Pressable } from 'react-native';
 
@@ -53,6 +54,40 @@ export function Shop() {
 
       <Text style={[styles.section, { marginTop: 18 }]}>Наряд</Text>
       <View style={styles.grid}>{FIT_ITEMS.map((it) => renderTile(it, state.outfit))}</View>
+
+      {/* Премиум за Telegram Stars (только внутри Telegram) */}
+      {getInitData() || PREMIUM_ITEMS.some((it) => state.owned[it.id]) ? (
+        <>
+          <Text style={[styles.section, { marginTop: 18 }]}>Премиум · Telegram Stars</Text>
+          <View style={styles.grid}>
+            {PREMIUM_ITEMS.map((it) => {
+              const owned = !!state.owned[it.id];
+              const equipped = (it.kind === 'pot' ? state.potSkin : state.outfit) === it.val;
+              const status = equipped ? 'Надето' : owned ? 'Надеть' : `⭐ ${it.cost}`;
+              return (
+                <Pressable
+                  key={it.id}
+                  onPress={() => actions.buyPremium(it)}
+                  style={[
+                    styles.tile,
+                    styles.premiumTile,
+                    {
+                      borderColor: equipped ? colors.sage : '#E4C266',
+                      backgroundColor: equipped ? '#EAF0E2' : '#FFF9E8',
+                    },
+                  ]}
+                >
+                  {it.kind === 'pot' ? <PotPreview skin={it.val} /> : <Text style={{ fontSize: 30 }}>{it.emoji}</Text>}
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.text, marginTop: 6 }}>{it.name}</Text>
+                  <Text style={{ fontFamily: fonts.extrabold, fontSize: 11.5, color: equipped ? colors.sageDark : owned ? colors.textMuted : '#B8860B', marginTop: 2 }}>
+                    {status}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
     </BottomSheet>
   );
 }
@@ -75,4 +110,5 @@ const styles = StyleSheet.create({
   section: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.textFaint, marginBottom: 10, letterSpacing: 0.3 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   tile: { width: '30.5%', borderRadius: 14, borderWidth: 2, paddingVertical: 12, paddingHorizontal: 6, alignItems: 'center' },
+  premiumTile: { shadowColor: '#D9A441', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
 });

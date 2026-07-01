@@ -88,8 +88,18 @@ export function makeInitialState(today: number): PersistentState {
     onboarded: false,
     homeId: null,
     homeRev: 0,
+    questBonusDay: -1,
+    cleanHistory: {},
+    focusDone: 0,
+    purchasesCount: 0,
+    earlyBird: false,
+    nightOwl: false,
   };
 }
+
+// Квест дня: закрой N дел — получи бонус.
+export const QUEST_GOAL = 3;
+export const QUEST_BONUS = 25;
 
 // Частоты-пресеты редактора.
 export const FREQ_PRESETS = [
@@ -107,6 +117,7 @@ export const POT_ITEMS: ShopItem[] = [
   { id: 'pot_blue', kind: 'pot', val: 'blue', cost: 80, name: 'Дымка', color: '#5E89A6' },
   { id: 'pot_plum', kind: 'pot', val: 'plum', cost: 90, name: 'Слива', color: '#9B7FB0' },
   { id: 'pot_sand', kind: 'pot', val: 'sand', cost: 70, name: 'Песок', color: '#D8A24E' },
+  { id: 'pot_berry', kind: 'pot', val: 'berry', cost: 120, name: 'Клубника', color: '#C96A6A' },
 ];
 
 export const FIT_ITEMS: ShopItem[] = [
@@ -114,6 +125,13 @@ export const FIT_ITEMS: ShopItem[] = [
   { id: 'fit_hat', kind: 'fit', val: 'hat', cost: 80, name: 'Колпачок', emoji: '🎉' },
   { id: 'fit_scarf', kind: 'fit', val: 'scarf', cost: 60, name: 'Шарфик', emoji: '🧣' },
   { id: 'fit_glasses', kind: 'fit', val: 'glasses', cost: 100, name: 'Очки', emoji: '🕶️' },
+  { id: 'fit_bow', kind: 'fit', val: 'bow', cost: 90, name: 'Бантик', emoji: '🎀' },
+  { id: 'fit_mustache', kind: 'fit', val: 'mustache', cost: 70, name: 'Усы', emoji: '🥸' },
+];
+
+// Премиум за Telegram Stars (цена в ⭐, покупается через инвойс бота).
+export const PREMIUM_ITEMS: ShopItem[] = [
+  { id: 'pot_gold', kind: 'pot', val: 'gold', cost: 25, name: 'Золотой', color: '#E0B14B' },
 ];
 
 // Скины горшка [тело, обод].
@@ -123,6 +141,8 @@ export const POT_SKINS: Record<string, [string, string]> = {
   blue: ['#5E89A6', '#4E7791'],
   plum: ['#9B7FB0', '#85699A'],
   sand: ['#D8A24E', '#C28C3C'],
+  berry: ['#C96A6A', '#B25454'],
+  gold: ['#E0B14B', '#C29232'],
 };
 
 // Эмодзи для выбора иконки комнаты.

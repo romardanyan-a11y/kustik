@@ -30,7 +30,9 @@ export function SettingsScreen() {
     const text = 'Заходи в наш общий дом в Кустике — будем убираться по чуть-чуть вместе 🌱';
     openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
   };
-  const achCount = achievements(state).filter((a) => a.unlocked || state.achUnlocked[a.key] != null).length;
+  const achList = achievements(state);
+  const achCount = achList.filter((a) => a.unlocked || state.achUnlocked[a.key] != null).length;
+  const achTotal = achList.length;
   const modeHint =
     state.mode === 'one'
       ? 'Все дела — твои. Просто и спокойно.'
@@ -187,7 +189,7 @@ export function SettingsScreen() {
         <View style={styles.divider} />
         <Pressable onPress={actions.openAch} style={styles.linkRow}>
           <Text style={styles.settingLabel}>🏅 Достижения</Text>
-          <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.textMuted }}>Открыто {achCount} из 8 →</Text>
+          <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.textMuted }}>Открыто {achCount} из {achTotal} →</Text>
         </Pressable>
       </View>
 

@@ -97,6 +97,13 @@ export interface PersistentState {
   // Локальные поля — в общий документ не входят.
   homeId: string | null;
   homeRev: number;
+  // Этап 3: квест дня, история чистоты, счётчики достижений.
+  questBonusDay: number; // день, за который бонус квеста уже выдан
+  cleanHistory: Record<number, number>; // день → % чистоты (для графика)
+  focusDone: number; // завершено фокус-таймеров
+  purchasesCount: number; // покупок в магазине
+  earlyBird: boolean; // закрывал дело до 9 утра
+  nightOwl: boolean; // закрывал дело после 22
 }
 
 export interface ShopItem {

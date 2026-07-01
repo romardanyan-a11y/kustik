@@ -2,7 +2,9 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Polyline } from 'react-native-svg';
 import { Plant } from '../components/Plant';
+import { QUEST_BONUS, QUEST_GOAL } from '../data/seed';
 import { TaskCard } from '../components/TaskCard';
 import { SlidersIcon } from '../components/icons';
 import { PillChip, ProgressBar, T } from '../components/ui';
@@ -31,6 +33,28 @@ export function TodayScreen() {
   }
   const upcoming = computeUpcoming(state.tasks, state.dayOffset);
   const weekly = weeklyStats(state);
+
+  // Квест дня.
+  const questCount = Math.min(QUEST_GOAL, state.log.filter((l) => l.day === state.dayOffset).length);
+  const questDone = state.questBonusDay === state.dayOffset || questCount >= QUEST_GOAL;
+
+  // Спарклайн чистоты за 14 дней.
+  const histDays: { d: number; v: number }[] = [];
+  for (let d = state.dayOffset - 13; d <= state.dayOffset; d++) {
+    const v = state.cleanHistory[d];
+    if (v != null) histDays.push({ d, v });
+  }
+  const showSpark = histDays.length >= 2;
+  const sparkW = 280;
+  const sparkH = 42;
+  const sparkPts = histDays
+    .map((p) => {
+      const x = ((p.d - (state.dayOffset - 13)) / 13) * (sparkW - 8) + 4;
+      const y = sparkH - 5 - (p.v / 100) * (sparkH - 10);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const lastPt = histDays.length ? histDays[histDays.length - 1] : null;
 
   return (
     <ScrollView
@@ -112,6 +136,32 @@ export function TodayScreen() {
         </ScrollView>
       ) : null}
 
+      {/* Квест дня */}
+      <View style={[styles.questCard, questDone && { backgroundColor: '#EAF0E2', borderColor: 'rgba(110,156,99,0.4)' }]}>
+        <Text style={{ fontSize: 20 }}>🎯</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: fonts.extrabold, fontSize: 13.5, color: questDone ? colors.sageDark : colors.text }}>
+            {questDone ? 'Квест дня выполнен!' : 'Квест дня: закрой 3 дела'}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
+            {Array.from({ length: QUEST_GOAL }, (_, i) => (
+              <View
+                key={i}
+                style={{
+                  width: 26,
+                  height: 6,
+                  borderRadius: 999,
+                  backgroundColor: i < questCount || questDone ? colors.sage : 'rgba(74,55,40,0.12)',
+                }}
+              />
+            ))}
+          </View>
+        </View>
+        <Text style={{ fontFamily: fonts.black, fontSize: 13.5, color: questDone ? colors.sageDark : colors.sparkText }}>
+          +{QUEST_BONUS} ✨
+        </Text>
+      </View>
+
       {/* «Пора сегодня» */}
       <View style={styles.sectionRow}>
         <Text style={{ fontFamily: fonts.black, fontSize: 18, color: colors.text }}>Пора сегодня</Text>
@@ -167,16 +217,46 @@ export function TodayScreen() {
         {weekly.isMulti ? (
           <View style={{ marginTop: 14 }}>
             <Text style={{ fontFamily: fonts.extrabold, fontSize: 12.5, color: colors.textFaint, marginBottom: 8 }}>ВКЛАД ЗА НЕДЕЛЮ</Text>
-            {weekly.memberStats.map((ms) => (
-              <View key={ms.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-                <Text style={{ fontSize: 15 }}>{ms.emoji}</Text>
-                <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.text, width: 54 }}>{ms.name}</Text>
-                <View style={{ flex: 1 }}>
-                  <ProgressBar frac={ms.frac} color={ms.color} height={8} />
+            {weekly.memberStats.map((ms) => {
+              const top = ms.sparks > 0 && ms.sparks === Math.max(...weekly.memberStats.map((x) => x.sparks));
+              return (
+                <View key={ms.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                  <Text style={{ fontSize: 15 }}>{ms.emoji}</Text>
+                  <Text numberOfLines={1} style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.text, width: 62 }}>
+                    {top ? '👑 ' : ''}{ms.name}
+                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <ProgressBar frac={ms.frac} color={ms.color} height={8} />
+                  </View>
+                  <Text style={{ fontFamily: fonts.extrabold, fontSize: 12.5, color: colors.sparkText, width: 46, textAlign: 'right' }}>✨ {ms.sparks}</Text>
                 </View>
-                <Text style={{ fontFamily: fonts.extrabold, fontSize: 12.5, color: colors.sparkText, width: 46, textAlign: 'right' }}>✨ {ms.sparks}</Text>
-              </View>
-            ))}
+              );
+            })}
+          </View>
+        ) : null}
+
+        {/* Спарклайн чистоты за 2 недели */}
+        {showSpark ? (
+          <View style={{ marginTop: 14 }}>
+            <Text style={{ fontFamily: fonts.extrabold, fontSize: 12.5, color: colors.textFaint, marginBottom: 6 }}>ЧИСТОТА ЗА 2 НЕДЕЛИ</Text>
+            <Svg width="100%" height={sparkH} viewBox={`0 0 ${sparkW} ${sparkH}`} preserveAspectRatio="none">
+              <Polyline
+                points={sparkPts}
+                fill="none"
+                stroke={colors.sage}
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {lastPt ? (
+                <Circle
+                  cx={(((lastPt.d - (state.dayOffset - 13)) / 13) * (sparkW - 8) + 4).toFixed(1)}
+                  cy={(sparkH - 5 - (lastPt.v / 100) * (sparkH - 10)).toFixed(1)}
+                  r={3.5}
+                  fill={colors.sage}
+                />
+              ) : null}
+            </Svg>
           </View>
         ) : null}
       </View>
@@ -256,5 +336,17 @@ const styles = StyleSheet.create({
   },
   upAvatar: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   weekCard: { backgroundColor: '#FBF4EA', borderRadius: 18, padding: 16, marginTop: 22, borderWidth: 1, borderColor: colors.borderSoft },
+  questCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    borderRadius: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 13,
+    marginBottom: 14,
+  },
   weekTile: { flex: 1, backgroundColor: '#FFFCF6', borderRadius: 13, paddingVertical: 14, paddingHorizontal: 6, alignItems: 'center', borderWidth: 1, borderColor: colors.borderSoft },
 });

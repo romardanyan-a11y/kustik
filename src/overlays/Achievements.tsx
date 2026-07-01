@@ -19,7 +19,7 @@ export function Achievements() {
   return (
     <BottomSheet visible={state.achOpen} onClose={actions.closeAch}>
       <Text style={styles.title}>🏅 Достижения</Text>
-      <Text style={styles.sub}>Открыто {count} из 8</Text>
+      <Text style={styles.sub}>Открыто {count} из {list.length}</Text>
       <View style={styles.grid}>
         {list.map((a) => (
           <View key={a.key} style={[styles.tile, { backgroundColor: a.unlocked ? '#FBF4EA' : '#F1EBE0', borderColor: a.unlocked ? 'rgba(110,156,99,0.35)' : colors.borderSoft, opacity: a.unlocked ? 1 : 0.55 }]}>

@@ -3,13 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import {
   defaultMembers,
-  FIT_ITEMS,
   makeInitialState,
   MEMBER_COLOR_POOL,
   MEMBER_EMOJI_POOL,
   NEW_ROOM_ACCENTS,
   NEW_ROOM_TINTS,
-  POT_ITEMS,
+  QUEST_BONUS,
+  QUEST_GOAL,
 } from '../data/seed';
 import type {
   EditingRoom,
@@ -23,8 +23,8 @@ import type {
 } from '../data/types';
 import { achievements, computeDue, daysSince, levelOf, overallClean, assignee, reward as rewardFn } from '../engine/engine';
 import { todayIndex } from '../engine/time';
-import { apiHomeCreate, apiHomeJoin, apiHomeSync, apiReminder, HomeMemberDoc } from '../telegram/api';
-import { cloudLoad, cloudSave, isInTelegram, telegramHaptic } from '../telegram/telegram';
+import { apiHomeCreate, apiHomeJoin, apiHomeSync, apiReminder, apiStarsClaim, apiStarsInvoice, HomeMemberDoc } from '../telegram/api';
+import { cloudLoad, cloudSave, getInitData, isInTelegram, openInvoice, telegramHaptic } from '../telegram/telegram';
 
 const STORAGE_KEY = 'kustik.state.v1';
 const COMBO_WINDOW_MS = 5000;
@@ -38,6 +38,7 @@ interface CelebrationInfo {
 interface EphemeralState {
   tab: Tab;
   achToast: string | null;
+  questToast: string | null;
   homeBusy: boolean; // идёт создание/вступление в общий дом
   editing: EditingTask | null;
   editingRoom: EditingRoom | null;
@@ -101,6 +102,7 @@ interface Actions {
   createHome: () => void;
   joinHome: (homeId: string) => void;
   leaveHome: () => void;
+  buyPremium: (item: ShopItem) => void;
 }
 
 const StoreContext = createContext<{ state: AppState; actions: Actions; hydrated: boolean } | null>(null);
@@ -110,6 +112,7 @@ const PERSISTENT_KEYS: (keyof PersistentState)[] = [
   'reminderOn', 'reminderHour', 'sparks', 'streak', 'streakBumped', 'owned', 'potSkin',
   'outfit', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
   'totalDone', 'achUnlocked', 'onboarded', 'homeId', 'homeRev',
+  'questBonusDay', 'cleanHistory', 'focusDone', 'purchasesCount', 'earlyBird', 'nightOwl',
 ];
 
 // Что уходит в общий документ дома (household-уровень).
@@ -118,6 +121,7 @@ const SHARED_KEYS: (keyof PersistentState)[] = [
   'rooms', 'tasks', 'mode', 'members', 'turns', 'log', 'sparks', 'streak', 'streakBumped',
   'owned', 'potSkin', 'outfit', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
   'totalDone', 'achUnlocked', 'dayOffset',
+  'questBonusDay', 'cleanHistory', 'focusDone', 'purchasesCount', 'earlyBird', 'nightOwl',
 ];
 
 function buildShared(state: AppState): Record<string, unknown> {
@@ -155,6 +159,7 @@ function makeFullInitial(): AppState {
     ...makeInitialState(todayIndex()),
     tab: 'today',
     achToast: null,
+    questToast: null,
     homeBusy: false,
     editing: null,
     editingRoom: null,
@@ -227,7 +232,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
         bumped = false; // все последующие пропущенные дни точно без выполнений
       }
-      return { ...s, dayOffset: today, streak, freezes, streakBumped: false, log: trimLog(s.log, today) };
+      // Фиксируем точку чистоты на сегодня (для графика).
+      const hist = { ...s.cleanHistory, [today]: Math.round(overallClean(s.tasks, today)) };
+      return { ...s, dayOffset: today, streak, freezes, streakBumped: false, log: trimLog(s.log, today), cleanHistory: hist };
     });
   }, []);
 
@@ -437,6 +444,64 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const leaveHome = useCallback(() => {
     setState((s) => ({ ...s, homeId: null, homeRev: 0, mode: 'one', members: [], me: 'm1', filter: 'all' }));
   }, []);
+
+  // --- Telegram Stars: покупка премиум-товара ---
+  const equipPremium = useCallback((item: ShopItem) => {
+    setState((s) => {
+      const owned = { ...s.owned, [item.id]: true };
+      const patch: Partial<AppState> = { owned, purchasesCount: s.owned[item.id] ? s.purchasesCount : s.purchasesCount + 1 };
+      if (item.kind === 'pot') patch.potSkin = item.val;
+      else patch.outfit = item.val;
+      return evalAch({ ...s, ...patch }, true);
+    });
+  }, [evalAch]);
+
+  const buyPremium = useCallback(
+    (item: ShopItem) => {
+      const s = stateRef.current;
+      if (s.owned[item.id]) {
+        equipPremium(item); // уже куплено — просто надеть
+        return;
+      }
+      (async () => {
+        const inv = await apiStarsInvoice(item.id);
+        if (!inv) return;
+        if (inv.alreadyOwned) {
+          equipPremium(item);
+          return;
+        }
+        if (!inv.link) return;
+        openInvoice(inv.link, (status) => {
+          if (status !== 'paid' || dead.current) return;
+          telegramHaptic('success');
+          equipPremium(item);
+          // Подтверждаем на сервере (восстановление на других устройствах).
+          apiStarsClaim().catch(() => {});
+        });
+      })();
+    },
+    [equipPremium]
+  );
+
+  // Восстановление Stars-покупок при старте (другое устройство и т.п.).
+  useEffect(() => {
+    if (!hydrated || !getInitData()) return;
+    (async () => {
+      const res = await apiStarsClaim();
+      if (!res || !res.items.length || dead.current) return;
+      setState((s) => {
+        const owned = { ...s.owned };
+        let changed = false;
+        res.items.forEach((id) => {
+          if (!owned[id]) {
+            owned[id] = true;
+            changed = true;
+          }
+        });
+        return changed ? { ...s, owned } : s;
+      });
+    })();
+  }, [hydrated]);
 
   // --- Регистрация ежедневного напоминания у бота ---
   const remTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -655,18 +720,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState((s) => {
       const owned = { ...s.owned };
       let sparks = s.sparks;
+      let purchasesCount = s.purchasesCount;
       if (!owned[item.id]) {
         if (sparks < item.cost) return s;
         sparks -= item.cost;
         owned[item.id] = true;
+        purchasesCount += 1;
       }
-      const patch: Partial<AppState> = { owned, sparks, sparksDisplay: sparks };
+      const patch: Partial<AppState> = { owned, sparks, sparksDisplay: sparks, purchasesCount };
       if (item.kind === 'pot') patch.potSkin = item.val;
       else patch.outfit = item.val;
       sparksTarget.current = sparks;
-      return { ...s, ...patch };
+      return evalAch({ ...s, ...patch }, true);
     });
-  }, []);
+  }, [evalAch]);
 
   // --- Таймер ---
   const tick = useCallback(() => {
@@ -731,6 +798,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     tweenSparks();
     telegramHaptic('success');
 
+    const hourNow = new Date().getHours();
     setState((s) => {
       const ns: AppState = {
         ...s,
@@ -738,6 +806,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         celebrating: { ...s.celebrating, [id]: { reward: '+' + reward, combo: combo > 1 ? '×' + combo + ' подряд' : '', stamp: now } },
         plantPop: true,
         maxCombo: Math.max(s.maxCombo, combo),
+        earlyBird: s.earlyBird || hourNow < 9,
+        nightOwl: s.nightOwl || hourNow >= 22,
       };
       if (!s.streakBumped) {
         ns.streak = s.streak + 1;
@@ -754,6 +824,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }, 640);
     setTimeout(() => {
       if (dead.current) return;
+      // Квест дня: N-е дело сегодня → бонус (считаем по стейту до записи в лог).
+      const sq = stateRef.current;
+      const todayCount = sq.log.filter((l) => l.day === sq.dayOffset).length + 1;
+      const questHit = todayCount >= QUEST_GOAL && sq.questBonusDay !== sq.dayOffset;
+      if (questHit) {
+        sparksTarget.current += QUEST_BONUS;
+        tweenSparks();
+        setTimeout(() => {
+          if (!dead.current) setState((s2) => ({ ...s2, questToast: null }));
+        }, 2600);
+      }
       setState((s) => {
         const tasks = s.tasks.map((x) => (x.id === id ? { ...x, lastDay: s.dayOffset } : x));
         const cel = { ...s.celebrating };
@@ -763,10 +844,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const turns = s.members.length ? { ...s.turns, [id]: (s.turns[id] || 0) + 1 } : s.turns;
         const log = trimLog([...s.log, { day: s.dayOffset, member, reward }], s.dayOffset);
         let next = { ...s, tasks, celebrating: cel, collapsing: col, turns, log, totalDone: s.totalDone + 1 };
+        if (questHit) {
+          next.sparks = s.sparks + QUEST_BONUS;
+          next.questBonusDay = s.dayOffset;
+          next.questToast = `🎯 Квест дня выполнен: +${QUEST_BONUS} ✨`;
+        }
 
         // Пост-эффекты на основе нового состояния.
         const cp = overallClean(next.tasks, next.dayOffset);
         if (cp > next.bestClean) next.bestClean = cp;
+        // История чистоты для графика (последние 60 дней).
+        const hist: Record<number, number> = { ...next.cleanHistory, [next.dayOffset]: Math.round(cp) };
+        Object.keys(hist).forEach((k) => {
+          if (Number(k) < next.dayOffset - 60) delete hist[Number(k)];
+        });
+        next.cleanHistory = hist;
         const due = computeDue(next.tasks, next.dayOffset);
         const lvl = levelOf(next.totalDone);
         if (lvl.idx > prevLevel) {
@@ -788,7 +880,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (timerInt.current) clearInterval(timerInt.current);
     const tm = stateRef.current.timer;
     // Бонус фокуса +8 — сразу в sparks (истина), твин докрутит отображение.
-    setState((s) => ({ ...s, timer: null, sparks: tm ? s.sparks + 8 : s.sparks }));
+    setState((s) => ({ ...s, timer: null, sparks: tm ? s.sparks + 8 : s.sparks, focusDone: tm ? s.focusDone + 1 : s.focusDone }));
     if (tm) {
       sparksTarget.current += 8;
       tweenSparks();
@@ -820,7 +912,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     saveRoom, nextDay, setMode, addMember, removeMember, renameMember, setMe, setFilter, setReminderHour,
     toggleReminder, snooze, toggleExpress, openShop, closeShop, openAch, closeAch, buyEquip, toggleFreeze,
     startTimer, pauseTimer, setTimerMins, closeTimer, finishTimer, complete, toggleRoom, closeCelebration,
-    openSoon, closeSoon, resetAll, completeOnboarding, createHome, joinHome, leaveHome,
+    openSoon, closeSoon, resetAll, completeOnboarding, createHome, joinHome, leaveHome, buyPremium,
   };
 
   return <StoreContext.Provider value={{ state, actions, hydrated }}>{children}</StoreContext.Provider>;

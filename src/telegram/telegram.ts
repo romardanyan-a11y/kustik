@@ -11,6 +11,7 @@ export interface TgWebApp {
   initData?: string;
   initDataUnsafe?: { start_param?: string; user?: { id: number; first_name: string } };
   openTelegramLink?: (url: string) => void;
+  openInvoice?: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void;
   disableVerticalSwipes?: () => void;
   setHeaderColor?: (c: string) => void;
   setBackgroundColor?: (c: string) => void;
@@ -117,6 +118,16 @@ export function getInitData(): string {
 // startapp-параметр диплинка (t.me/bot?startapp=...).
 export function getStartParam(): string | null {
   return getWA()?.initDataUnsafe?.start_param || null;
+}
+
+// Открыть счёт Telegram Stars; колбэк получает статус оплаты.
+export function openInvoice(url: string, cb: (status: string) => void): boolean {
+  const wa = getWA();
+  if (wa?.openInvoice) {
+    wa.openInvoice(url, cb as (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void);
+    return true;
+  }
+  return false;
 }
 
 // Открыть t.me-ссылку (шеринг приглашения).

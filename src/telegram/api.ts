@@ -55,3 +55,12 @@ export interface SyncResult {
 export function apiHomeSync(homeId: string, baseRev: number, state?: Record<string, unknown>): Promise<SyncResult | null> {
   return post<SyncResult>('/api/home/sync', state ? { homeId, baseRev, state } : { homeId });
 }
+
+// --- Telegram Stars ---
+export function apiStarsInvoice(itemId: string): Promise<{ ok: boolean; link?: string; alreadyOwned?: boolean } | null> {
+  return post('/api/stars/invoice', { itemId });
+}
+
+export function apiStarsClaim(): Promise<{ ok: boolean; items: string[] } | null> {
+  return post('/api/stars/claim', {});
+}

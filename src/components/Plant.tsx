@@ -193,6 +193,24 @@ export function Plant({ bloom, potSkin, outfit, levelIdx, pop, width = 188, heig
           <Path d="M84 144 L116 144 L116 149 L84 149 Z" fill="#A8472E" />
           <Circle cx={100} cy={111} r={4} fill="#F4C56A" />
         </G>
+        {/* Наряд: бантик (на ободе горшка, справа) */}
+        <G opacity={outfit === 'bow' ? 1 : 0}>
+          <Path d="M110 149 Q112 141 119 143 Q122 146 120 149 Q122 152 119 155 Q112 157 110 149 Z" fill="#EC9BB4" />
+          <Path d="M130 149 Q128 141 121 143 Q118 146 120 149 Q118 152 121 155 Q128 157 130 149 Z" fill="#EC9BB4" />
+          <Circle cx={120} cy={149} r={3.2} fill="#E07A9A" />
+        </G>
+        {/* Наряд: усы (над ртом) */}
+        <G opacity={outfit === 'mustache' ? 1 : 0}>
+          <Path d="M100 183 Q94 179 89 182 Q85 185 88 187 Q94 189 100 185 Z" fill="#4A3328" />
+          <Path d="M100 183 Q106 179 111 182 Q115 185 112 187 Q106 189 100 185 Z" fill="#4A3328" />
+        </G>
+        {/* Блеск золотого горшка */}
+        {potSkin === 'gold' ? (
+          <G>
+            <Path d="M112 165 l1.6 5 5 1.6 -5 1.6 -1.6 5 -1.6 -5 -5 -1.6 5 -1.6 z" fill="#FFF3C9" opacity={0.9} />
+            <Path d="M86 192 l1.1 3.4 3.4 1.1 -3.4 1.1 -1.1 3.4 -1.1 -3.4 -3.4 -1.1 3.4 -1.1 z" fill="#FFF3C9" opacity={0.75} />
+          </G>
+        ) : null}
       </ASvg>
     </Animated.View>
   );

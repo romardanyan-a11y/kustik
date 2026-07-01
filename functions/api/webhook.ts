@@ -8,6 +8,15 @@ interface TgUpdate {
     text?: string;
     chat: { id: number };
     from?: { first_name?: string };
+    successful_payment?: {
+      currency: string;
+      total_amount: number;
+      invoice_payload: string; // "<userId>:<itemId>"
+    };
+  };
+  pre_checkout_query?: {
+    id: string;
+    invoice_payload: string;
   };
 }
 
@@ -22,6 +31,29 @@ export const onRequestPost = async (ctx: PagesContext): Promise<Response> => {
     update = (await request.json()) as TgUpdate;
   } catch {
     return err('bad json');
+  }
+
+  // --- Telegram Stars: подтверждаем оплату ---
+  if (update.pre_checkout_query) {
+    await tg(env.BOT_TOKEN, 'answerPreCheckoutQuery', {
+      pre_checkout_query_id: update.pre_checkout_query.id,
+      ok: true,
+    });
+    return json({ ok: true });
+  }
+  // --- Telegram Stars: фиксируем успешную покупку ---
+  if (update.message?.successful_payment) {
+    const payload = update.message.successful_payment.invoice_payload || '';
+    const [userId, itemId] = payload.split(':');
+    if (userId && itemId) {
+      await env.KV.put(`star:${userId}:${itemId}`, JSON.stringify({ at: Date.now(), amount: update.message.successful_payment.total_amount }));
+      await tg(env.BOT_TOKEN, 'sendMessage', {
+        chat_id: update.message.chat.id,
+        text: 'Покупка получена! Открой Кустик — обновка уже ждёт 🌟',
+        reply_markup: { inline_keyboard: [[{ text: '🌱 Открыть Кустик', web_app: { url: APP_URL } }]] },
+      });
+    }
+    return json({ ok: true });
   }
 
   const msg = update.message;

@@ -213,6 +213,14 @@ export function achievements(state: PersistentState): AchievementDef[] {
     { key: 'a6', emoji: '💨', name: 'Комбо!', desc: '3 дела подряд', unlocked: state.maxCombo >= 3 },
     { key: 'a7', emoji: '🧽', name: 'Марафонец', desc: '20 дел закрыто', unlocked: totalDone >= 20 },
     { key: 'a8', emoji: '🏠', name: 'Всё блестит', desc: 'Все комнаты чистые', unlocked: allClean },
+    { key: 'a9', emoji: '🌋', name: 'Две недели огня', desc: 'Серия 14 дней', unlocked: state.streak >= 14 },
+    { key: 'a10', emoji: '🌟', name: 'Несгибаемость', desc: 'Серия 30 дней', unlocked: state.streak >= 30 },
+    { key: 'a11', emoji: '🏃', name: 'Полтинник', desc: '50 дел закрыто', unlocked: totalDone >= 50 },
+    { key: 'a12', emoji: '🎯', name: 'Фокус-мастер', desc: '5 фокус-уборок', unlocked: state.focusDone >= 5 },
+    { key: 'a13', emoji: '🛍️', name: 'Шопоголик', desc: '3 покупки в магазинчике', unlocked: state.purchasesCount >= 3 },
+    { key: 'a14', emoji: '🐦', name: 'Ранняя пташка', desc: 'Дело закрыто до 9 утра', unlocked: state.earlyBird },
+    { key: 'a15', emoji: '🦉', name: 'Ночная сова', desc: 'Дело закрыто после 22', unlocked: state.nightOwl },
+    { key: 'a16', emoji: '💎', name: 'Стерильно', desc: 'Чистота 95% и выше', unlocked: Math.max(state.bestClean, curClean) >= 95 },
   ];
 }
 

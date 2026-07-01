@@ -21,8 +21,9 @@ import type {
   TimerState,
   Filter,
 } from '../data/types';
-import { computeDue, daysSince, levelOf, maturity, overallClean, assignee, reward as rewardFn } from '../engine/engine';
-import { telegramHaptic } from '../telegram/telegram';
+import { achievements, computeDue, daysSince, levelOf, overallClean, assignee, reward as rewardFn } from '../engine/engine';
+import { todayIndex } from '../engine/time';
+import { cloudLoad, cloudSave, telegramHaptic } from '../telegram/telegram';
 
 const STORAGE_KEY = 'kustik.state.v1';
 const COMBO_WINDOW_MS = 5000;
@@ -35,6 +36,7 @@ interface CelebrationInfo {
 
 interface EphemeralState {
   tab: Tab;
+  achToast: string | null;
   editing: EditingTask | null;
   editingRoom: EditingRoom | null;
   timer: TimerState | null;
@@ -93,20 +95,45 @@ interface Actions {
   openSoon: () => void;
   closeSoon: () => void;
   resetAll: () => void;
+  completeOnboarding: (roomIds: string[]) => void;
 }
 
-const StoreContext = createContext<{ state: AppState; actions: Actions } | null>(null);
+const StoreContext = createContext<{ state: AppState; actions: Actions; hydrated: boolean } | null>(null);
 
 const PERSISTENT_KEYS: (keyof PersistentState)[] = [
   'rooms', 'tasks', 'dayOffset', 'mode', 'members', 'me', 'turns', 'filter', 'log',
   'reminderOn', 'reminderHour', 'sparks', 'streak', 'streakBumped', 'owned', 'potSkin',
   'outfit', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
+  'totalDone', 'achUnlocked', 'onboarded',
 ];
+
+// Журнал держим компактным (CloudStorage-лимиты): последние 30 дней, максимум 500 записей.
+// Метрика уровней — totalDone, поэтому подрезка журнала ничего не ломает.
+function trimLog(log: PersistentState['log'], today: number): PersistentState['log'] {
+  return log.filter((l) => l.day > today - 30).slice(-500);
+}
+
+// Миграция сейва эпохи демо-прототипа (dayOffset от 0) на реальные дни.
+function migrateSave(saved: Partial<PersistentState>, today: number): Partial<PersistentState> {
+  const s = { ...saved };
+  if (s.totalDone == null) {
+    const shift = today - (s.dayOffset ?? 0);
+    if (s.tasks) s.tasks = s.tasks.map((t) => ({ ...t, lastDay: t.lastDay + shift }));
+    if (s.log) s.log = s.log.map((l) => ({ ...l, day: l.day + shift }));
+    s.dayOffset = today;
+    s.totalDone = s.log ? s.log.length : 0;
+    s.achUnlocked = s.achUnlocked ?? {};
+    // Старый сейв = человек уже пользовался, онбординг не показываем.
+    s.onboarded = true;
+  }
+  return s;
+}
 
 function makeFullInitial(): AppState {
   return {
-    ...makeInitialState(),
+    ...makeInitialState(todayIndex()),
     tab: 'today',
+    achToast: null,
     editing: null,
     editingRoom: null,
     timer: null,
@@ -137,44 +164,120 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const comboTime = useRef(0);
   const comboCount = useRef(0);
   const dead = useRef(false);
+  const cloudTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // --- Гидрация из хранилища ---
+  // --- Вечные достижения: фиксируем новые разблокировки в achUnlocked ---
+  const evalAch = useCallback((next: AppState, withToast: boolean): AppState => {
+    const defs = achievements(next);
+    const un = { ...next.achUnlocked };
+    let firstNew: { emoji: string; name: string } | null = null;
+    let changed = false;
+    for (const a of defs) {
+      if (a.unlocked && un[a.key] == null) {
+        un[a.key] = next.dayOffset;
+        changed = true;
+        if (!firstNew) firstNew = { emoji: a.emoji, name: a.name };
+      }
+    }
+    if (!changed) return next;
+    const out = { ...next, achUnlocked: un };
+    if (withToast && firstNew) {
+      out.achToast = `${firstNew.emoji} ${firstNew.name}`;
+      setTimeout(() => {
+        if (!dead.current) setState((s) => ({ ...s, achToast: null }));
+      }, 2600);
+    }
+    return out;
+  }, []);
+
+  // --- Переход на текущий день: пропущенные дни сжигают заморозки/серию ---
+  const advanceToToday = useCallback(() => {
+    const today = todayIndex();
+    setState((s) => {
+      if (today <= s.dayOffset) return s;
+      let streak = s.streak;
+      let freezes = s.freezes;
+      let bumped = s.streakBumped;
+      for (let d = s.dayOffset; d < today; d++) {
+        if (!bumped) {
+          if (s.autoFreeze && freezes > 0) freezes -= 1;
+          else streak = 0;
+        }
+        bumped = false; // все последующие пропущенные дни точно без выполнений
+      }
+      return { ...s, dayOffset: today, streak, freezes, streakBumped: false, log: trimLog(s.log, today) };
+    });
+  }, []);
+
+  // --- Гидрация: CloudStorage Telegram → localStorage → сид ---
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        let raw: string | null = null;
+        try {
+          raw = await cloudLoad(STORAGE_KEY);
+        } catch {
+          // облако недоступно — идём в локальное
+        }
+        if (!raw) raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          const saved = JSON.parse(raw) as Partial<PersistentState>;
+          const saved = migrateSave(JSON.parse(raw) as Partial<PersistentState>, todayIndex());
           setState((s) => {
             const merged = { ...s, ...saved } as AppState;
             sparksTarget.current = merged.sparks;
             merged.sparksDisplay = merged.sparks;
-            return merged;
+            return evalAch(merged, false);
           });
         }
       } catch {
         // игнорируем — стартуем с сидом
       }
       setHydrated(true);
+      advanceToToday();
     })();
     return () => {
       dead.current = true;
       if (timerInt.current) clearInterval(timerInt.current);
       if (sparksRaf.current) cancelAnimationFrame(sparksRaf.current);
+      if (cloudTimer.current) clearTimeout(cloudTimer.current);
     };
-  }, []);
+  }, [advanceToToday, evalAch]);
 
-  // --- Персистенция ---
+  // --- Следим за сменой суток: раз в минуту и при возврате в приложение ---
+  useEffect(() => {
+    const int = setInterval(advanceToToday, 60000);
+    let visHandler: (() => void) | null = null;
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      visHandler = () => {
+        if (document.visibilityState === 'visible') advanceToToday();
+      };
+      document.addEventListener('visibilitychange', visHandler);
+    }
+    return () => {
+      clearInterval(int);
+      if (visHandler) document.removeEventListener('visibilitychange', visHandler);
+    };
+  }, [advanceToToday]);
+
+  // --- Персистенция: локально сразу, в облако Telegram — с дебаунсом ---
   useEffect(() => {
     if (!hydrated) return;
     const persistent: Partial<PersistentState> = {};
     PERSISTENT_KEYS.forEach((k) => {
       (persistent as Record<string, unknown>)[k] = state[k];
     });
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(persistent)).catch(() => {});
+    const json = JSON.stringify(persistent);
+    AsyncStorage.setItem(STORAGE_KEY, json).catch(() => {});
+    if (cloudTimer.current) clearTimeout(cloudTimer.current);
+    cloudTimer.current = setTimeout(() => {
+      cloudSave(STORAGE_KEY, json).catch(() => {});
+    }, 1500);
   }, [hydrated, ...PERSISTENT_KEYS.map((k) => state[k])]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Анимация счётчика искр ---
+  // Важно: sparks (источник истины) меняется мгновенно в действиях;
+  // здесь анимируется только отображение sparksDisplay. Если rAF не успеет
+  // (вкладку свернули), награда всё равно уже сохранена.
   const tweenSparks = useCallback(() => {
     if (sparksRaf.current) cancelAnimationFrame(sparksRaf.current);
     const start = stateRef.current.sparksDisplay;
@@ -185,7 +288,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (dead.current) return;
       const k = Math.min(1, (Date.now() - t0) / dur);
       const v = Math.round(start + (end - start) * (1 - Math.pow(1 - k, 3)));
-      setState((s) => ({ ...s, sparks: v, sparksDisplay: v }));
+      setState((s) => ({ ...s, sparksDisplay: v }));
       if (k < 1) sparksRaf.current = requestAnimationFrame(step);
     };
     sparksRaf.current = requestAnimationFrame(step);
@@ -445,7 +548,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const reward = rewardFn(t, s0.dayOffset);
     const asg = assignee(t, s0);
     const member = asg ? asg.id : 'me';
-    const prevLevel = levelOf(s0.log.length).idx;
+    const prevLevel = levelOf(s0.totalDone).idx;
     const now = Date.now();
     const combo = now - comboTime.current < COMBO_WINDOW_MS ? comboCount.current + 1 : 1;
     comboTime.current = now;
@@ -457,6 +560,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState((s) => {
       const ns: AppState = {
         ...s,
+        sparks: s.sparks + reward, // источник истины — сразу, анимация отдельно
         celebrating: { ...s.celebrating, [id]: { reward: '+' + reward, combo: combo > 1 ? '×' + combo + ' подряд' : '', stamp: now } },
         plantPop: true,
         maxCombo: Math.max(s.maxCombo, combo),
@@ -483,14 +587,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const col = { ...s.collapsing };
         delete col[id];
         const turns = s.members.length ? { ...s.turns, [id]: (s.turns[id] || 0) + 1 } : s.turns;
-        const log = [...s.log, { day: s.dayOffset, member, reward }];
-        const next = { ...s, tasks, celebrating: cel, collapsing: col, turns, log };
+        const log = trimLog([...s.log, { day: s.dayOffset, member, reward }], s.dayOffset);
+        let next = { ...s, tasks, celebrating: cel, collapsing: col, turns, log, totalDone: s.totalDone + 1 };
 
         // Пост-эффекты на основе нового состояния.
         const cp = overallClean(next.tasks, next.dayOffset);
         if (cp > next.bestClean) next.bestClean = cp;
         const due = computeDue(next.tasks, next.dayOffset);
-        const lvl = levelOf(next.log.length);
+        const lvl = levelOf(next.totalDone);
         if (lvl.idx > prevLevel) {
           next.levelUpName = lvl.name;
           setTimeout(() => {
@@ -500,16 +604,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (due.length === 0) {
           next.showCelebration = true;
         }
-        return next;
+        return evalAch(next, true);
       });
     }, 1000);
-  }, [tweenSparks]);
+  }, [tweenSparks, evalAch]);
   completeRef.current = complete;
 
   const finishTimer = useCallback(() => {
     if (timerInt.current) clearInterval(timerInt.current);
     const tm = stateRef.current.timer;
-    setState((s) => ({ ...s, timer: null }));
+    // Бонус фокуса +8 — сразу в sparks (истина), твин докрутит отображение.
+    setState((s) => ({ ...s, timer: null, sparks: tm ? s.sparks + 8 : s.sparks }));
     if (tm) {
       sparksTarget.current += 8;
       tweenSparks();
@@ -527,15 +632,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState(fresh);
   }, []);
 
+  // Онбординг: оставить только выбранные комнаты (и их задачи).
+  const completeOnboarding = useCallback((roomIds: string[]) => {
+    setState((s) => {
+      const rooms = s.rooms.filter((r) => roomIds.includes(r.id));
+      const tasks = s.tasks.filter((t) => roomIds.includes(t.roomId));
+      return { ...s, rooms, tasks, onboarded: true, expandedRoom: rooms[0]?.id ?? null };
+    });
+  }, []);
+
   const actions: Actions = {
     setTab, openEdit, newTask, editPatch, closeEdit, saveEdit, deleteTask, newRoom, patchRoom, closeRoom,
     saveRoom, nextDay, setMode, addMember, removeMember, renameMember, setMe, setFilter, setReminderHour,
     toggleReminder, snooze, toggleExpress, openShop, closeShop, openAch, closeAch, buyEquip, toggleFreeze,
     startTimer, pauseTimer, setTimerMins, closeTimer, finishTimer, complete, toggleRoom, closeCelebration,
-    openSoon, closeSoon, resetAll,
+    openSoon, closeSoon, resetAll, completeOnboarding,
   };
 
-  return <StoreContext.Provider value={{ state, actions }}>{children}</StoreContext.Provider>;
+  return <StoreContext.Provider value={{ state, actions, hydrated }}>{children}</StoreContext.Provider>;
 }
 
 export function useStore() {

@@ -196,8 +196,10 @@ export interface AchievementDef {
   desc: string;
   unlocked: boolean;
 }
+// Условия достижений «истинны сейчас». Разблокировка навсегда фиксируется
+// в state.achUnlocked (см. стор) — здесь только вычисление условий.
 export function achievements(state: PersistentState): AchievementDef[] {
-  const totalDone = state.log.length;
+  const totalDone = state.totalDone;
   const lvl = levelOf(totalDone);
   const curClean = overallClean(state.tasks, state.dayOffset);
   const allClean = state.rooms.every((r) => roomClean(state.tasks, r.id, state.dayOffset) >= 70);
@@ -267,7 +269,7 @@ export interface LevelProgress {
   frac: number;
 }
 export function levelProgress(state: PersistentState): LevelProgress {
-  const totalDone = state.log.length;
+  const totalDone = state.totalDone;
   const lvl = levelOf(totalDone);
   const tiersMax = [6, 14, 26, 45, Infinity];
   const nextMax = tiersMax[lvl.idx];

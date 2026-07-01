@@ -8,7 +8,12 @@ import { colors, fonts } from '../theme/tokens';
 
 export function Achievements() {
   const { state, actions } = useStore();
-  const list = achievements(state);
+  // Достижение открыто навсегда, если зафиксировано в achUnlocked
+  // (условие «сейчас истинно» тоже учитываем — до ближайшей фиксации).
+  const list = achievements(state).map((a) => ({
+    ...a,
+    unlocked: a.unlocked || state.achUnlocked[a.key] != null,
+  }));
   const count = list.filter((a) => a.unlocked).length;
 
   return (

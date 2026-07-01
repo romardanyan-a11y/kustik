@@ -79,14 +79,13 @@ export const radius = {
 };
 
 export const fonts = {
-  // Имена соответствуют ключам, под которыми грузятся шрифты в App.tsx
+  // Имена соответствуют ключам, под которыми грузятся шрифты в App.tsx.
+  // Грузим только реально используемые начертания (размер бандла).
   regular: 'Nunito_400Regular',
-  medium: 'Nunito_500Medium',
   semibold: 'Nunito_600SemiBold',
   bold: 'Nunito_700Bold',
   extrabold: 'Nunito_800ExtraBold',
   black: 'Nunito_900Black',
-  caveatMedium: 'Caveat_500Medium',
   caveatSemibold: 'Caveat_600SemiBold',
   caveatBold: 'Caveat_700Bold',
 };

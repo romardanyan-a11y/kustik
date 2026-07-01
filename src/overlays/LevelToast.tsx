@@ -9,7 +9,13 @@ export function LevelToast() {
   const { state } = useStore();
   const insets = useSafeAreaInsets();
   const anim = useRef(new Animated.Value(0)).current;
-  const visible = !!state.levelUpName;
+  // Тост уровня приоритетнее тоста достижения.
+  const text = state.levelUpName
+    ? `🎉 Новый уровень: ${state.levelUpName}`
+    : state.achToast
+    ? `🏅 Достижение: ${state.achToast}`
+    : null;
+  const visible = !!text;
 
   useEffect(() => {
     if (visible) {
@@ -29,7 +35,7 @@ export function LevelToast() {
       pointerEvents="none"
       style={[styles.toast, { top: insets.top + 8, opacity: anim, transform: [{ translateY }] }]}
     >
-      <Text style={{ fontFamily: fonts.extrabold, fontSize: 14, color: '#fff' }}>🎉 Новый уровень: {state.levelUpName}</Text>
+      <Text style={{ fontFamily: fonts.extrabold, fontSize: 14, color: '#fff' }}>{text}</Text>
     </Animated.View>
   );
 }

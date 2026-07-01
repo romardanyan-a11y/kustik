@@ -6,7 +6,8 @@ import { Plant } from '../components/Plant';
 import { TaskCard } from '../components/TaskCard';
 import { SlidersIcon } from '../components/icons';
 import { PillChip, ProgressBar, T } from '../components/ui';
-import { assignee, computeDue, computeUpcoming, dateLabel, greetingInfo, isSleepy, levelProgress, overallClean, quip, roomClean, upcomingWhen, weatherFor, weeklyStats } from '../engine/engine';
+import { assignee, computeDue, computeUpcoming, dateLabel, greetingInfo, isSleepy, levelOf, levelProgress, overallClean, quip, upcomingWhen, weatherFor, weeklyStats } from '../engine/engine';
+import { isDebug } from '../engine/time';
 import { useStore } from '../state/store';
 import { colors, fonts, radius, shadows } from '../theme/tokens';
 
@@ -180,10 +181,12 @@ export function TodayScreen() {
         ) : null}
       </View>
 
-      {/* Демо-ссылка */}
-      <Pressable onPress={actions.nextDay} style={{ alignSelf: 'center', marginTop: 20, padding: 8 }}>
-        <T style={{ fontSize: 12.5, color: colors.textPale }}>↻ промотать день вперёд · демо</T>
-      </Pressable>
+      {/* Демо-ссылка: только в debug-режиме (?debug в URL или dev-сборка) */}
+      {isDebug() ? (
+        <Pressable onPress={actions.nextDay} style={{ alignSelf: 'center', marginTop: 20, padding: 8 }}>
+          <T style={{ fontSize: 12.5, color: colors.textPale }}>↻ промотать день вперёд · демо</T>
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 }
@@ -199,9 +202,7 @@ function WeekTile({ big, label }: { big: string; label: string }) {
 
 // Индекс уровня (для аксессуаров растения).
 function levelIndex(state: ReturnType<typeof useStore>['state']) {
-  const tiers = [6, 14, 26, 45, Infinity];
-  const n = state.log.length;
-  return tiers.findIndex((m) => n < m);
+  return levelOf(state.totalDone).idx;
 }
 
 const styles = StyleSheet.create({

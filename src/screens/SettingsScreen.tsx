@@ -19,7 +19,7 @@ export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { state, actions } = useStore();
   const isMulti = state.members.length > 0;
-  const achCount = achievements(state).filter((a) => a.unlocked).length;
+  const achCount = achievements(state).filter((a) => a.unlocked || state.achUnlocked[a.key] != null).length;
   const modeHint =
     state.mode === 'one'
       ? 'Все дела — твои. Просто и спокойно.'

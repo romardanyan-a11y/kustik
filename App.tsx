@@ -1,18 +1,14 @@
 // «Кустик» — приложение для домашней уборки «по чуть-чуть». Корень.
-import {
-  Caveat_500Medium,
-  Caveat_600SemiBold,
-  Caveat_700Bold,
-} from '@expo-google-fonts/caveat';
-import {
-  Nunito_400Regular,
-  Nunito_500Medium,
-  Nunito_600SemiBold,
-  Nunito_700Bold,
-  Nunito_800ExtraBold,
-  Nunito_900Black,
-  useFonts,
-} from '@expo-google-fonts/nunito';
+// Subpath-импорты шрифтов: в бандл попадают только нужные начертания
+// (корневой импорт пакета тащит все 20+ ttf, включая италики).
+import { Caveat_600SemiBold } from '@expo-google-fonts/caveat/600SemiBold';
+import { Caveat_700Bold } from '@expo-google-fonts/caveat/700Bold';
+import { Nunito_400Regular } from '@expo-google-fonts/nunito/400Regular';
+import { Nunito_600SemiBold } from '@expo-google-fonts/nunito/600SemiBold';
+import { Nunito_700Bold } from '@expo-google-fonts/nunito/700Bold';
+import { Nunito_800ExtraBold } from '@expo-google-fonts/nunito/800ExtraBold';
+import { Nunito_900Black } from '@expo-google-fonts/nunito/900Black';
+import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
@@ -29,6 +25,7 @@ import { LevelToast } from './src/overlays/LevelToast';
 import { NewRoom } from './src/overlays/NewRoom';
 import { Shop } from './src/overlays/Shop';
 import { TaskEditor } from './src/overlays/TaskEditor';
+import { Onboarding } from './src/screens/Onboarding';
 import { RoomsScreen } from './src/screens/RoomsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { TodayScreen } from './src/screens/TodayScreen';
@@ -36,7 +33,7 @@ import { StoreProvider, useStore } from './src/state/store';
 import { colors } from './src/theme/tokens';
 
 function Root() {
-  const { state, actions } = useStore();
+  const { state, actions, hydrated } = useStore();
 
   // Системная кнопка «Назад» Telegram закрывает верхний открытый лист/оверлей.
   const overlayCloser =
@@ -59,6 +56,20 @@ function Root() {
   useEffect(() => {
     return setTelegramBackButton(!!overlayCloser, () => overlayCloser?.());
   }, [overlayCloser]);
+
+  // Ждём загрузку сейва, чтобы онбординг не мигал у вернувшихся.
+  if (!hydrated) {
+    return <LinearGradient colors={[colors.bgTop, colors.bgBottom]} style={{ flex: 1 }} />;
+  }
+
+  // Первый запуск — онбординг вместо всего интерфейса.
+  if (!state.onboarded) {
+    return (
+      <LinearGradient colors={[colors.bgTop, colors.bgBottom]} style={{ flex: 1 }}>
+        <Onboarding />
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient colors={[colors.bgTop, colors.bgBottom]} style={{ flex: 1 }}>
@@ -85,12 +96,10 @@ function Root() {
 export default function App() {
   const [loaded, error] = useFonts({
     Nunito_400Regular,
-    Nunito_500Medium,
     Nunito_600SemiBold,
     Nunito_700Bold,
     Nunito_800ExtraBold,
     Nunito_900Black,
-    Caveat_500Medium,
     Caveat_600SemiBold,
     Caveat_700Bold,
   });

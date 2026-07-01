@@ -64,6 +64,8 @@ export interface EditingRoom {
 export interface PersistentState {
   rooms: Room[];
   tasks: Task[];
+  // Индекс «сегодняшних» суток (todayIndex()). Название историческое:
+  // в прототипе это был демо-сдвиг, теперь — реальный день.
   dayOffset: number;
   mode: Mode;
   members: Member[];
@@ -84,6 +86,13 @@ export interface PersistentState {
   freezes: number;
   autoFreeze: boolean;
   uid: number;
+  // Всего выполнено дел за всю историю (метрика уровней).
+  // Отдельно от log, потому что log подрезается по времени.
+  totalDone: number;
+  // Разблокированные достижения навсегда: ключ → день разблокировки.
+  achUnlocked: Record<string, number>;
+  // Пройден ли онбординг.
+  onboarded: boolean;
 }
 
 export interface ShopItem {

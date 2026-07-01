@@ -1,5 +1,5 @@
 // Стартовый сид «Кустик» — точные данные из прототипа (seed.json / Кустик.dc.html).
-import type { LogEntry, PersistentState, Room, Task, Member, ShopItem } from './types';
+import type { PersistentState, Room, Task, Member, ShopItem } from './types';
 
 export const SEED_ROOMS: Room[] = [
   { id: 'k', name: 'Кухня', emoji: '🍳', tint: '#F3D8C6', accent: '#C56A4B' },
@@ -9,6 +9,8 @@ export const SEED_ROOMS: Room[] = [
   { id: 'h', name: 'Прихожая', emoji: '🚪', tint: '#F0E1CD', accent: '#C99A5C' },
 ];
 
+// daysAgo хранится в lastDay как -ago; при создании состояния сдвигается
+// на реальный индекс дня (см. makeInitialState).
 const T = (id: string, roomId: string, name: string, freq: number, ago: number): Task => ({
   id,
   roomId,
@@ -50,35 +52,28 @@ export function defaultMembers(n: number): Member[] {
   return DEFAULT_MEMBERS.slice(0, n).map((m) => ({ ...m }));
 }
 
-function makeSeedLog(): LogEntry[] {
-  const out: LogEntry[] = [];
-  const sm = ['m1', 'm2', 'm1', 'm3', 'm2', 'm1', 'm2', 'm3', 'm1', 'm2', 'm1', 'm3', 'm2'];
-  const sd = [-6, -6, -5, -5, -4, -4, -3, -3, -2, -2, -1, -1, -1];
-  for (let i = 0; i < sd.length; i++) {
-    out.push({ day: sd[i], member: sm[i], reward: 5 + (i % 4) });
-  }
-  return out;
-}
-
-export function makeInitialState(): PersistentState {
+// Чистое стартовое состояние на реальном дне today (индекс локальных суток).
+// Задачи получают «возраст» из сида (daysAgo), поэтому в первый день уже
+// есть 7 дел «пора» и чистота ≈61% — первый дофамин гарантирован.
+export function makeInitialState(today: number): PersistentState {
   const turns: Record<string, number> = {};
   SEED_TASKS.forEach((t, i) => {
     turns[t.id] = i;
   });
   return {
     rooms: SEED_ROOMS.map((r) => ({ ...r })),
-    tasks: SEED_TASKS.map((t) => ({ ...t })),
-    dayOffset: 0,
+    tasks: SEED_TASKS.map((t) => ({ ...t, lastDay: today + t.lastDay })),
+    dayOffset: today,
     mode: 'one',
     members: [],
     me: 'm1',
     turns,
     filter: 'all',
-    log: makeSeedLog(),
+    log: [],
     reminderOn: true,
     reminderHour: 9,
     sparks: 140,
-    streak: 5,
+    streak: 0,
     streakBumped: false,
     owned: { pot_terracotta: true, fit_none: true },
     potSkin: 'terracotta',
@@ -88,6 +83,9 @@ export function makeInitialState(): PersistentState {
     freezes: 2,
     autoFreeze: true,
     uid: 100,
+    totalDone: 0,
+    achUnlocked: {},
+    onboarded: false,
   };
 }
 

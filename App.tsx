@@ -15,8 +15,9 @@ import {
 } from '@expo-google-fonts/nunito';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { initTelegram, setTelegramBackButton } from './src/telegram/telegram';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TabBar } from './src/components/TabBar';
@@ -82,7 +83,7 @@ function Root() {
 }
 
 export default function App() {
-  const [loaded] = useFonts({
+  const [loaded, error] = useFonts({
     Nunito_400Regular,
     Nunito_500Medium,
     Nunito_600SemiBold,
@@ -94,12 +95,21 @@ export default function App() {
     Caveat_700Bold,
   });
 
+  // Не блокируем приложение навсегда, если шрифты почему-то не грузятся
+  // (актуально для in-app браузера Telegram): максимум 2.5с спиннера.
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setTimedOut(true), 2500);
+    return () => clearTimeout(t);
+  }, []);
+
   // Инициализация Telegram Mini App (no-op вне Telegram).
   useEffect(() => {
     initTelegram();
   }, []);
 
-  if (!loaded) {
+  const ready = loaded || timedOut || !!error;
+  if (!ready) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bgTop, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator color={colors.primary} />
@@ -108,11 +118,13 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <StatusBar style="dark" />
-      <StoreProvider>
-        <Root />
-      </StoreProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <StoreProvider>
+          <Root />
+        </StoreProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

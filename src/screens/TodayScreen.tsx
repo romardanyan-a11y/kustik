@@ -11,7 +11,10 @@ import { PillChip, ProgressBar, T } from '../components/ui';
 import { assignee, computeDue, computeUpcoming, dateLabel, greetingInfo, isSleepy, levelOf, levelProgress, overallClean, quip, upcomingWhen, weatherFor, weeklyStats } from '../engine/engine';
 import { isDebug } from '../engine/time';
 import { useStore } from '../state/store';
+import { getInitData, openTelegramLink } from '../telegram/telegram';
 import { colors, fonts, radius, shadows } from '../theme/tokens';
+
+const BOT_LINK = 'https://t.me/KustikCleaner_bot';
 
 export function TodayScreen() {
   const insets = useSafeAreaInsets();
@@ -55,6 +58,14 @@ export function TodayScreen() {
     })
     .join(' ');
   const lastPt = histDays.length ? histDays[histDays.length - 1] : null;
+
+  // Шеринг прогресса (только в Telegram).
+  const share = () => {
+    const text = `Мой дом чист на ${cleanPct}% — кустик ${cleanPct >= 62 ? 'цветёт' : 'старается'}! 🌱 Серия ${state.streak} ${
+      state.streak === 1 ? 'день' : state.streak < 5 ? 'дня' : 'дней'
+    }, ${weekly.count} ${weekly.countLabel} за неделю. Заведи и ты своего кустика:`;
+    openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(BOT_LINK)}&text=${encodeURIComponent(text)}`);
+  };
 
   return (
     <ScrollView
@@ -261,6 +272,13 @@ export function TodayScreen() {
         ) : null}
       </View>
 
+      {/* Похвастаться прогрессом (только в Telegram) */}
+      {getInitData() ? (
+        <Pressable onPress={share} style={styles.shareBtn}>
+          <Text style={{ fontFamily: fonts.extrabold, fontSize: 14, color: colors.primaryDeep }}>🌟 Похвастаться прогрессом</Text>
+        </Pressable>
+      ) : null}
+
       {/* Демо-ссылка: только в debug-режиме (?debug в URL или dev-сборка) */}
       {isDebug() ? (
         <Pressable onPress={actions.nextDay} style={{ alignSelf: 'center', marginTop: 20, padding: 8 }}>
@@ -336,6 +354,16 @@ const styles = StyleSheet.create({
   },
   upAvatar: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   weekCard: { backgroundColor: '#FBF4EA', borderRadius: 18, padding: 16, marginTop: 22, borderWidth: 1, borderColor: colors.borderSoft },
+  shareBtn: {
+    alignSelf: 'center',
+    marginTop: 16,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: 'rgba(197,106,75,0.35)',
+    backgroundColor: 'rgba(255,252,246,0.7)',
+  },
   questCard: {
     flexDirection: 'row',
     alignItems: 'center',

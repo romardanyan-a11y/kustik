@@ -2,8 +2,9 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { BottomSheet } from '../components/Sheet';
-import { FIT_ITEMS, POT_ITEMS, POT_SKINS, PREMIUM_ITEMS } from '../data/seed';
+import { BG_ITEMS, BG_THEMES, FIT_ITEMS, POT_ITEMS, POT_SKINS, PREMIUM_ITEMS } from '../data/seed';
 import type { ShopItem } from '../data/types';
 import { useStore } from '../state/store';
 import { getInitData } from '../telegram/telegram';
@@ -12,6 +13,20 @@ import { Pressable } from 'react-native';
 
 export function Shop() {
   const { state, actions } = useStore();
+
+  const renderPreview = (it: ShopItem) => {
+    if (it.kind === 'pot') return <PotPreview skin={it.val} />;
+    if (it.kind === 'bg') {
+      const g = BG_THEMES[it.val] || BG_THEMES.classic;
+      return (
+        <LinearGradient
+          colors={g}
+          style={{ width: 40, height: 36, borderRadius: 9, borderWidth: 1, borderColor: 'rgba(74,55,40,0.12)' }}
+        />
+      );
+    }
+    return <Text style={{ fontSize: 30 }}>{it.emoji}</Text>;
+  };
 
   const renderTile = (it: ShopItem, equippedVal: string) => {
     const owned = !!state.owned[it.id];
@@ -31,7 +46,7 @@ export function Shop() {
           },
         ]}
       >
-        {it.kind === 'pot' ? <PotPreview skin={it.val} /> : <Text style={{ fontSize: 30 }}>{it.emoji}</Text>}
+        {renderPreview(it)}
         <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: colors.text, marginTop: 6 }}>{it.name}</Text>
         <Text style={{ fontFamily: fonts.extrabold, fontSize: 11.5, color: equipped ? colors.sageDark : owned ? colors.textMuted : colors.sparkText, marginTop: 2 }}>
           {status}
@@ -54,6 +69,9 @@ export function Shop() {
 
       <Text style={[styles.section, { marginTop: 18 }]}>Наряд</Text>
       <View style={styles.grid}>{FIT_ITEMS.map((it) => renderTile(it, state.outfit))}</View>
+
+      <Text style={[styles.section, { marginTop: 18 }]}>Фон</Text>
+      <View style={styles.grid}>{BG_ITEMS.map((it) => renderTile(it, state.bgTheme))}</View>
 
       {/* Премиум за Telegram Stars (только внутри Telegram) */}
       {getInitData() || PREMIUM_ITEMS.some((it) => state.owned[it.id]) ? (

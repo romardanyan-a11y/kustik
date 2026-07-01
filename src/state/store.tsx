@@ -110,7 +110,7 @@ const StoreContext = createContext<{ state: AppState; actions: Actions; hydrated
 const PERSISTENT_KEYS: (keyof PersistentState)[] = [
   'rooms', 'tasks', 'dayOffset', 'mode', 'members', 'me', 'turns', 'filter', 'log',
   'reminderOn', 'reminderHour', 'sparks', 'streak', 'streakBumped', 'owned', 'potSkin',
-  'outfit', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
+  'outfit', 'bgTheme', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
   'totalDone', 'achUnlocked', 'onboarded', 'homeId', 'homeRev',
   'questBonusDay', 'cleanHistory', 'focusDone', 'purchasesCount', 'earlyBird', 'nightOwl',
 ];
@@ -119,7 +119,7 @@ const PERSISTENT_KEYS: (keyof PersistentState)[] = [
 // Личное (me, filter, reminder*, onboarded, homeId/homeRev) остаётся на устройстве.
 const SHARED_KEYS: (keyof PersistentState)[] = [
   'rooms', 'tasks', 'mode', 'members', 'turns', 'log', 'sparks', 'streak', 'streakBumped',
-  'owned', 'potSkin', 'outfit', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
+  'owned', 'potSkin', 'outfit', 'bgTheme', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
   'totalDone', 'achUnlocked', 'dayOffset',
   'questBonusDay', 'cleanHistory', 'focusDone', 'purchasesCount', 'earlyBird', 'nightOwl',
 ];
@@ -729,6 +729,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       const patch: Partial<AppState> = { owned, sparks, sparksDisplay: sparks, purchasesCount };
       if (item.kind === 'pot') patch.potSkin = item.val;
+      else if (item.kind === 'bg') patch.bgTheme = item.val;
       else patch.outfit = item.val;
       sparksTarget.current = sparks;
       return evalAch({ ...s, ...patch }, true);

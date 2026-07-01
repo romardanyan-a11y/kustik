@@ -81,6 +81,7 @@ export interface PersistentState {
   owned: Record<string, boolean>;
   potSkin: string;
   outfit: string;
+  bgTheme: string; // тема фона приложения (магазин)
   bestClean: number;
   maxCombo: number;
   freezes: number;
@@ -108,7 +109,7 @@ export interface PersistentState {
 
 export interface ShopItem {
   id: string;
-  kind: 'pot' | 'fit';
+  kind: 'pot' | 'fit' | 'bg';
   val: string;
   cost: number;
   name: string;

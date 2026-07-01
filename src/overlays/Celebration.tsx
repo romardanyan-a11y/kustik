@@ -2,7 +2,9 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ConfettiRain } from '../components/Confetti';
+import { overallClean } from '../engine/engine';
 import { useStore } from '../state/store';
+import { getInitData, openTelegramLink } from '../telegram/telegram';
 import { colors, fonts, shadows } from '../theme/tokens';
 
 export function Celebration() {
@@ -30,6 +32,20 @@ export function Celebration() {
           <Pressable onPress={actions.closeCelebration} style={styles.btn}>
             <Text style={{ fontFamily: fonts.black, fontSize: 16, color: '#fff' }}>Красота! 🎉</Text>
           </Pressable>
+          {getInitData() ? (
+            <Pressable
+              onPress={() => {
+                const pct = Math.round(overallClean(state.tasks, state.dayOffset));
+                const text = `Все дела на сегодня закрыты — дом чист на ${pct}%, кустик в восторге! 🌷 Заведи и ты своего кустика:`;
+                openTelegramLink(
+                  `https://t.me/share/url?url=${encodeURIComponent('https://t.me/KustikCleaner_bot')}&text=${encodeURIComponent(text)}`
+                );
+              }}
+              style={{ marginTop: 12, padding: 6 }}
+            >
+              <Text style={{ fontFamily: fonts.extrabold, fontSize: 14, color: colors.primaryDeep }}>🌟 Поделиться</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Modal>

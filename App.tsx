@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { BG_THEMES } from './src/data/seed';
 import { getStartParam, initTelegram, setTelegramBackButton } from './src/telegram/telegram';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TabBar } from './src/components/TabBar';
@@ -34,6 +35,7 @@ import { colors } from './src/theme/tokens';
 
 function Root() {
   const { state, actions, hydrated } = useStore();
+  const bg = BG_THEMES[state.bgTheme] || BG_THEMES.classic;
 
   // Системная кнопка «Назад» Telegram закрывает верхний открытый лист/оверлей.
   const overlayCloser =
@@ -67,20 +69,20 @@ function Root() {
 
   // Ждём загрузку сейва, чтобы онбординг не мигал у вернувшихся.
   if (!hydrated) {
-    return <LinearGradient colors={[colors.bgTop, colors.bgBottom]} style={{ flex: 1 }} />;
+    return <LinearGradient colors={bg} style={{ flex: 1 }} />;
   }
 
   // Первый запуск — онбординг вместо всего интерфейса.
   if (!state.onboarded) {
     return (
-      <LinearGradient colors={[colors.bgTop, colors.bgBottom]} style={{ flex: 1 }}>
+      <LinearGradient colors={bg} style={{ flex: 1 }}>
         <Onboarding />
       </LinearGradient>
     );
   }
 
   return (
-    <LinearGradient colors={[colors.bgTop, colors.bgBottom]} style={{ flex: 1 }}>
+    <LinearGradient colors={bg} style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
         {state.tab === 'today' && <TodayScreen />}
         {state.tab === 'rooms' && <RoomsScreen />}

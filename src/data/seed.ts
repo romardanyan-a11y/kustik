@@ -75,9 +75,10 @@ export function makeInitialState(today: number): PersistentState {
     sparks: 140,
     streak: 0,
     streakBumped: false,
-    owned: { pot_terracotta: true, fit_none: true },
+    owned: { pot_terracotta: true, fit_none: true, bg_classic: true },
     potSkin: 'terracotta',
     outfit: 'none',
+    bgTheme: 'classic',
     bestClean: 0,
     maxCombo: 1,
     freezes: 2,
@@ -133,6 +134,23 @@ export const FIT_ITEMS: ShopItem[] = [
 export const PREMIUM_ITEMS: ShopItem[] = [
   { id: 'pot_gold', kind: 'pot', val: 'gold', cost: 25, name: 'Золотой', color: '#E0B14B' },
 ];
+
+// Темы фона приложения (вертикальный градиент [верх, низ]).
+export const BG_ITEMS: ShopItem[] = [
+  { id: 'bg_classic', kind: 'bg', val: 'classic', cost: 0, name: 'Классика' },
+  { id: 'bg_dawn', kind: 'bg', val: 'dawn', cost: 100, name: 'Рассвет' },
+  { id: 'bg_mint', kind: 'bg', val: 'mint', cost: 100, name: 'Мята' },
+  { id: 'bg_lavender', kind: 'bg', val: 'lavender', cost: 120, name: 'Лаванда' },
+  { id: 'bg_sky', kind: 'bg', val: 'sky', cost: 120, name: 'Небо' },
+];
+
+export const BG_THEMES: Record<string, [string, string]> = {
+  classic: ['#F8EFE0', '#F2E7D3'],
+  dawn: ['#F9E9E2', '#F3D9CE'],
+  mint: ['#EDF4E6', '#DCEAD2'],
+  lavender: ['#F2ECF7', '#E4DAEE'],
+  sky: ['#E7F0F6', '#D6E5EF'],
+};
 
 // Скины горшка [тело, обод].
 export const POT_SKINS: Record<string, [string, string]> = {

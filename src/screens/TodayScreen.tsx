@@ -20,7 +20,7 @@ export function TodayScreen() {
   const [greet, greetEmoji] = greetingInfo();
   const sleepy = isSleepy();
   const weather = weatherFor(cleanPct);
-  const isMulti = state.members.length > 0;
+  const isMulti = state.members.length > 1;
 
   let due = computeDue(state.tasks, state.dayOffset);
   if (isMulti && state.filter !== 'all') {

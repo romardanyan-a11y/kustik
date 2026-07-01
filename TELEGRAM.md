@@ -40,6 +40,28 @@ Cloudflared выдаст ссылку вида `https://xxxx.trycloudflare.com` 
 ### (необязательно) Кнопка «Открыть Кустик» в меню бота
 BotFather → `/mybots` → выбрать бота → **Bot Settings → Menu Button → Configure menu button** → указать тот же URL и текст кнопки. Тогда в чате с ботом появится постоянная кнопка запуска.
 
+## Бэкенд (Pages Functions, папка `functions/`)
+
+Деплоится автоматически вместе с сайтом при `git push`. Эндпоинты (same-origin `kustik.pages.dev/api/*`):
+- `POST /api/webhook` — вебхук бота (/start, /help), защищён secret_token.
+- `POST /api/reminder` — регистрация ежедневного напоминания (подпись initData).
+- `GET /api/cron?key=<CRON_SECRET>` — ежечасная рассылка напоминаний (дёргается внешним планировщиком, напр. cron-job.org).
+- `POST /api/home/create|join|sync` — совместный дом: создание, вступление по `startapp=h_<id>`, синхронизация (LWW по ревизиям).
+
+Все запросы от клиента подписаны Telegram `initData` и валидируются HMAC-ом на сервере.
+
+### Что нужно настроить в Cloudflare Pages (dashboard, один раз)
+1. **KV**: Storage & Databases → KV → Create namespace (`kustik`). Затем в проекте Pages:
+   Settings → Bindings → Add → KV namespace, имя переменной **`KV`**, выбрать созданный namespace.
+2. **Переменные**: Settings → Environment variables (Production):
+   - `BOT_TOKEN` = токен бота (Secret)
+   - `CRON_SECRET` = секрет из настройки вебхука (Secret)
+3. Redeploy (Deployments → Retry deployment), чтобы биндинги подхватились.
+
+### Планировщик напоминаний
+На [cron-job.org](https://cron-job.org) (бесплатно) создать задание: URL
+`https://kustik.pages.dev/api/cron?key=<CRON_SECRET>`, расписание — каждый час в :01.
+
 ## Заметки
 - Данные сохраняются в `localStorage` браузера Telegram (для MVP этого хватает). Если нужен общий прогресс между устройствами/участниками — понадобится бэкенд (можно через `initData` бота для авторизации пользователя).
 - Демо-кнопка «↻ промотать день вперёд» — инструмент показа движка; перед реальным релизом заменить на настоящие даты.

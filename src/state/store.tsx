@@ -23,7 +23,8 @@ import type {
 } from '../data/types';
 import { achievements, computeDue, daysSince, levelOf, overallClean, assignee, reward as rewardFn } from '../engine/engine';
 import { todayIndex } from '../engine/time';
-import { cloudLoad, cloudSave, telegramHaptic } from '../telegram/telegram';
+import { apiHomeCreate, apiHomeJoin, apiHomeSync, apiReminder, HomeMemberDoc } from '../telegram/api';
+import { cloudLoad, cloudSave, isInTelegram, telegramHaptic } from '../telegram/telegram';
 
 const STORAGE_KEY = 'kustik.state.v1';
 const COMBO_WINDOW_MS = 5000;
@@ -37,6 +38,7 @@ interface CelebrationInfo {
 interface EphemeralState {
   tab: Tab;
   achToast: string | null;
+  homeBusy: boolean; // идёт создание/вступление в общий дом
   editing: EditingTask | null;
   editingRoom: EditingRoom | null;
   timer: TimerState | null;
@@ -96,6 +98,9 @@ interface Actions {
   closeSoon: () => void;
   resetAll: () => void;
   completeOnboarding: (roomIds: string[]) => void;
+  createHome: () => void;
+  joinHome: (homeId: string) => void;
+  leaveHome: () => void;
 }
 
 const StoreContext = createContext<{ state: AppState; actions: Actions; hydrated: boolean } | null>(null);
@@ -104,8 +109,24 @@ const PERSISTENT_KEYS: (keyof PersistentState)[] = [
   'rooms', 'tasks', 'dayOffset', 'mode', 'members', 'me', 'turns', 'filter', 'log',
   'reminderOn', 'reminderHour', 'sparks', 'streak', 'streakBumped', 'owned', 'potSkin',
   'outfit', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
-  'totalDone', 'achUnlocked', 'onboarded',
+  'totalDone', 'achUnlocked', 'onboarded', 'homeId', 'homeRev',
 ];
+
+// Что уходит в общий документ дома (household-уровень).
+// Личное (me, filter, reminder*, onboarded, homeId/homeRev) остаётся на устройстве.
+const SHARED_KEYS: (keyof PersistentState)[] = [
+  'rooms', 'tasks', 'mode', 'members', 'turns', 'log', 'sparks', 'streak', 'streakBumped',
+  'owned', 'potSkin', 'outfit', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
+  'totalDone', 'achUnlocked', 'dayOffset',
+];
+
+function buildShared(state: AppState): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  SHARED_KEYS.forEach((k) => {
+    out[k] = state[k];
+  });
+  return out;
+}
 
 // Журнал держим компактным (CloudStorage-лимиты): последние 30 дней, максимум 500 записей.
 // Метрика уровней — totalDone, поэтому подрезка журнала ничего не ломает.
@@ -134,6 +155,7 @@ function makeFullInitial(): AppState {
     ...makeInitialState(todayIndex()),
     tab: 'today',
     achToast: null,
+    homeBusy: false,
     editing: null,
     editingRoom: null,
     timer: null,
@@ -273,6 +295,158 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       cloudSave(STORAGE_KEY, json).catch(() => {});
     }, 1500);
   }, [hydrated, ...PERSISTENT_KEYS.map((k) => state[k])]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ===========================================================================
+  // Совместный дом: push с дебаунсом, pull по фокусу/интервалу, create/join.
+  // Модель: last-write-wins по ревизиям; конфликт — принимаем серверное.
+  // ===========================================================================
+  const skipPush = useRef(false);
+  const pushDirty = useRef(false);
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Применить серверный снапшот (общие ключи + участники) к локальному состоянию.
+  const applyHome = useCallback(
+    (
+      snap: { state?: Partial<PersistentState> | null; members?: HomeMemberDoc[]; rev: number },
+      extra?: Partial<AppState>
+    ) => {
+      skipPush.current = true;
+      setState((s) => {
+        const merged: AppState = { ...s, ...extra };
+        if (snap.state) {
+          SHARED_KEYS.forEach((k) => {
+            const v = (snap.state as Record<string, unknown>)[k];
+            if (v !== undefined) (merged as unknown as Record<string, unknown>)[k] = v;
+          });
+        }
+        if (snap.members) {
+          merged.members = snap.members.map((m) => ({ id: m.id, name: m.name, emoji: m.emoji, color: m.color }));
+        }
+        merged.homeRev = snap.rev;
+        return evalAch(merged, false);
+      });
+      // Снапшот мог приехать со «вчерашним» днём — выравниваем на сегодня.
+      setTimeout(() => advanceToToday(), 0);
+    },
+    [advanceToToday, evalAch]
+  );
+
+  const doPush = useCallback(async () => {
+    const s = stateRef.current;
+    if (!s.homeId) return;
+    pushDirty.current = false;
+    const res = await apiHomeSync(s.homeId, s.homeRev, buildShared(s));
+    if (!res) {
+      pushDirty.current = true; // сеть моргнула — ретрай при следующем pull
+      return;
+    }
+    if (res.conflict) {
+      applyHome(res);
+      return;
+    }
+    skipPush.current = true;
+    setState((s2) => ({ ...s2, homeRev: res.rev }));
+  }, [applyHome]);
+
+  // Push при изменении общих ключей.
+  useEffect(() => {
+    if (!hydrated || !state.homeId) return;
+    if (skipPush.current) {
+      skipPush.current = false;
+      return;
+    }
+    pushDirty.current = true;
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(doPush, 1200);
+  }, [hydrated, state.homeId, doPush, ...SHARED_KEYS.map((k) => state[k])]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pull при возврате в приложение и раз в 45 секунд (+ ретрай незапушенного).
+  useEffect(() => {
+    if (!hydrated || !state.homeId) return;
+    const pull = async () => {
+      const s = stateRef.current;
+      if (!s.homeId) return;
+      if (pushDirty.current) {
+        doPush();
+        return;
+      }
+      const res = await apiHomeSync(s.homeId, s.homeRev);
+      if (res && res.rev > stateRef.current.homeRev) applyHome(res);
+    };
+    pull();
+    const int = setInterval(pull, 45000);
+    let vis: (() => void) | null = null;
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      vis = () => {
+        if (document.visibilityState === 'visible') pull();
+      };
+      document.addEventListener('visibilitychange', vis);
+    }
+    return () => {
+      clearInterval(int);
+      if (vis) document.removeEventListener('visibilitychange', vis);
+    };
+  }, [hydrated, state.homeId, applyHome, doPush]);
+
+  const createHome = useCallback(() => {
+    const s = stateRef.current;
+    if (s.homeId || s.homeBusy) return;
+    setState((x) => ({ ...x, homeBusy: true }));
+    (async () => {
+      // Локальные «фейковые» участники в общий дом не едут — реальные придут из Telegram.
+      const payload = buildShared({ ...s, mode: 'one', members: [] } as AppState);
+      const snap = await apiHomeCreate(payload);
+      if (!snap) {
+        setState((x) => ({ ...x, homeBusy: false }));
+        return;
+      }
+      applyHome(snap, {
+        homeId: snap.homeId,
+        me: snap.member.id,
+        homeBusy: false,
+        mode: 'one',
+        members: [{ id: snap.member.id, name: snap.member.name, emoji: snap.member.emoji, color: snap.member.color }],
+        filter: 'all',
+      });
+    })();
+  }, [applyHome]);
+
+  const joinHome = useCallback(
+    (homeId: string) => {
+      const s = stateRef.current;
+      if (s.homeBusy || !homeId || s.homeId === homeId) return;
+      setState((x) => ({ ...x, homeBusy: true }));
+      (async () => {
+        const snap = await apiHomeJoin(homeId);
+        if (!snap) {
+          setState((x) => ({ ...x, homeBusy: false }));
+          return;
+        }
+        applyHome(snap, {
+          homeId: snap.homeId,
+          me: snap.member.id,
+          homeBusy: false,
+          onboarded: true, // общий дом уже настроен создателем
+          filter: 'all',
+        });
+      })();
+    },
+    [applyHome]
+  );
+
+  const leaveHome = useCallback(() => {
+    setState((s) => ({ ...s, homeId: null, homeRev: 0, mode: 'one', members: [], me: 'm1', filter: 'all' }));
+  }, []);
+
+  // --- Регистрация ежедневного напоминания у бота ---
+  const remTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!hydrated || !isInTelegram()) return;
+    if (remTimer.current) clearTimeout(remTimer.current);
+    remTimer.current = setTimeout(() => {
+      apiReminder(stateRef.current.reminderOn, stateRef.current.reminderHour);
+    }, 800);
+  }, [hydrated, state.reminderOn, state.reminderHour]);
 
   // --- Анимация счётчика искр ---
   // Важно: sparks (источник истины) меняется мгновенно в действиях;
@@ -547,7 +721,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!t) return;
     const reward = rewardFn(t, s0.dayOffset);
     const asg = assignee(t, s0);
-    const member = asg ? asg.id : 'me';
+    const member = asg ? asg.id : s0.me; // в общем доме важно, кто именно закрыл
     const prevLevel = levelOf(s0.totalDone).idx;
     const now = Date.now();
     const combo = now - comboTime.current < COMBO_WINDOW_MS ? comboCount.current + 1 : 1;
@@ -646,7 +820,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     saveRoom, nextDay, setMode, addMember, removeMember, renameMember, setMe, setFilter, setReminderHour,
     toggleReminder, snooze, toggleExpress, openShop, closeShop, openAch, closeAch, buyEquip, toggleFreeze,
     startTimer, pauseTimer, setTimerMins, closeTimer, finishTimer, complete, toggleRoom, closeCelebration,
-    openSoon, closeSoon, resetAll, completeOnboarding,
+    openSoon, closeSoon, resetAll, completeOnboarding, createHome, joinHome, leaveHome,
   };
 
   return <StoreContext.Provider value={{ state, actions, hydrated }}>{children}</StoreContext.Provider>;

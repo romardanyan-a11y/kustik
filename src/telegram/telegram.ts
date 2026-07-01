@@ -8,6 +8,9 @@ const SDK_URL = 'https://telegram.org/js/telegram-web-app.js';
 export interface TgWebApp {
   ready: () => void;
   expand: () => void;
+  initData?: string;
+  initDataUnsafe?: { start_param?: string; user?: { id: number; first_name: string } };
+  openTelegramLink?: (url: string) => void;
   disableVerticalSwipes?: () => void;
   setHeaderColor?: (c: string) => void;
   setBackgroundColor?: (c: string) => void;
@@ -104,6 +107,26 @@ export function telegramHaptic(kind: 'light' | 'success' = 'light') {
 
 export function isInTelegram(): boolean {
   return getWA() != null;
+}
+
+// Сырая строка initData — подпись для серверных запросов.
+export function getInitData(): string {
+  return getWA()?.initData || '';
+}
+
+// startapp-параметр диплинка (t.me/bot?startapp=...).
+export function getStartParam(): string | null {
+  return getWA()?.initDataUnsafe?.start_param || null;
+}
+
+// Открыть t.me-ссылку (шеринг приглашения).
+export function openTelegramLink(url: string): boolean {
+  const wa = getWA();
+  if (wa?.openTelegramLink) {
+    wa.openTelegramLink(url);
+    return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

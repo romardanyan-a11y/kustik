@@ -90,9 +90,10 @@ export const LEVEL_TIERS: LevelTier[] = [
 export const levelOf = (n: number): LevelTier => LEVEL_TIERS.find((t) => n < t.max)!;
 
 // --- Ротация ответственных ---
+// С одним участником (общий дом до прихода партнёра) ротация не нужна.
 export function assignee(t: Task, state: PersistentState): Member | null {
   const ms = state.members;
-  if (!ms.length) return null;
+  if (ms.length < 2) return null;
   const n = ms.length;
   const k = ((((state.turns[t.id] || 0) % n) + n) % n);
   return ms[k];
@@ -235,7 +236,7 @@ export function weeklyStats(state: PersistentState): WeeklyStats {
   }));
   const best = roomPcts.slice().sort((a, b) => b.pct - a.pct)[0] || { name: '', emoji: '', pct: 0 };
   const worst = roomPcts.slice().sort((a, b) => a.pct - b.pct)[0] || { name: '', emoji: '', pct: 0 };
-  const isMulti = members.length > 0;
+  const isMulti = members.length > 1;
   let memberStats: WeeklyStats['memberStats'] = [];
   if (isMulti) {
     const sums = members.map((m) => weekLog.filter((l) => l.member === m.id).reduce((a, l) => a + l.reward, 0));

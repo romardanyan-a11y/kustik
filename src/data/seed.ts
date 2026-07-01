@@ -86,6 +86,8 @@ export function makeInitialState(today: number): PersistentState {
     totalDone: 0,
     achUnlocked: {},
     onboarded: false,
+    homeId: null,
+    homeRev: 0,
   };
 }
 

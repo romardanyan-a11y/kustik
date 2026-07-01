@@ -14,7 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
-import { initTelegram, setTelegramBackButton } from './src/telegram/telegram';
+import { getStartParam, initTelegram, setTelegramBackButton } from './src/telegram/telegram';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TabBar } from './src/components/TabBar';
 import { Achievements } from './src/overlays/Achievements';
@@ -56,6 +56,14 @@ function Root() {
   useEffect(() => {
     return setTelegramBackButton(!!overlayCloser, () => overlayCloser?.());
   }, [overlayCloser]);
+
+  // Приглашение в общий дом: t.me/бот?startapp=h_<homeId>.
+  useEffect(() => {
+    if (!hydrated) return;
+    const sp = getStartParam();
+    if (sp && sp.startsWith('h_')) actions.joinHome(sp.slice(2));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
 
   // Ждём загрузку сейва, чтобы онбординг не мигал у вернувшихся.
   if (!hydrated) {

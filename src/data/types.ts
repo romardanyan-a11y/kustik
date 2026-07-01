@@ -93,6 +93,10 @@ export interface PersistentState {
   achUnlocked: Record<string, number>;
   // Пройден ли онбординг.
   onboarded: boolean;
+  // Совместный дом (Telegram): id дома и последняя известная ревизия сервера.
+  // Локальные поля — в общий документ не входят.
+  homeId: string | null;
+  homeRev: number;
 }
 
 export interface ShopItem {

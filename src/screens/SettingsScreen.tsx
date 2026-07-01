@@ -6,8 +6,11 @@ import { CloseIcon } from '../components/icons';
 import { SectionLabel, Stepper, Toggle } from '../components/ui';
 import { achievements } from '../engine/engine';
 import { useStore } from '../state/store';
+import { getInitData, openTelegramLink } from '../telegram/telegram';
 import { colors, fonts, radius, shadows } from '../theme/tokens';
 import type { Mode } from '../data/types';
+
+const BOT_USERNAME = 'KustikCleaner_bot';
 
 const MODES: { label: string; v: Mode }[] = [
   { label: 'Один', v: 'one' },
@@ -19,6 +22,14 @@ export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { state, actions } = useStore();
   const isMulti = state.members.length > 0;
+  const inHome = !!state.homeId;
+
+  const invite = () => {
+    if (!state.homeId) return;
+    const link = `https://t.me/${BOT_USERNAME}?startapp=h_${state.homeId}`;
+    const text = 'Заходи в наш общий дом в Кустике — будем убираться по чуть-чуть вместе 🌱';
+    openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
+  };
   const achCount = achievements(state).filter((a) => a.unlocked || state.achUnlocked[a.key] != null).length;
   const modeHint =
     state.mode === 'one'
@@ -35,7 +46,52 @@ export function SettingsScreen() {
     >
       <Text style={{ fontFamily: fonts.black, fontSize: 30, color: colors.text, marginBottom: 18 }}>Настройки</Text>
 
-      {/* Режим */}
+      {/* Совместный дом (только внутри Telegram — там есть подписанный initData) */}
+      {getInitData() || inHome ? (
+        <View style={styles.block}>
+          <SectionLabel>Совместный дом</SectionLabel>
+          {inHome ? (
+            <>
+              {state.members.map((m) => (
+                <View key={m.id} style={styles.memberRow}>
+                  <View style={[styles.memberAvatar, { borderColor: m.color }]}>
+                    <Text style={{ fontSize: 20 }}>{m.emoji}</Text>
+                  </View>
+                  <Text style={[styles.nameInput, { paddingVertical: 8 }]}>{m.name}</Text>
+                  {m.id === state.me ? (
+                    <View style={[styles.meChip, styles.meChipActive]}>
+                      <Text style={{ fontFamily: fonts.extrabold, fontSize: 11, color: colors.sageDark }}>это ты</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ))}
+              <Pressable onPress={invite} style={styles.inviteBtn}>
+                <Text style={{ fontFamily: fonts.black, fontSize: 15, color: '#fff' }}>🔗 Пригласить в дом</Text>
+              </Pressable>
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 11.5, color: colors.textMuted, marginTop: 10, textAlign: 'center' }}>
+                Дела, кустик и искры — общие. Дела распределяются по очереди.
+              </Text>
+              <Pressable onPress={actions.leaveHome} style={{ alignItems: 'center', marginTop: 10, padding: 4 }}>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 12.5, color: colors.rust }}>Выйти из дома</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.textMuted, marginBottom: 12 }}>
+                Убирайтесь вместе: общий кустик, общие дела, честная очередь. Партнёру ничего не нужно устанавливать.
+              </Text>
+              <Pressable onPress={actions.createHome} disabled={state.homeBusy} style={[styles.inviteBtn, state.homeBusy && { opacity: 0.6 }]}>
+                <Text style={{ fontFamily: fonts.black, fontSize: 15, color: '#fff' }}>
+                  {state.homeBusy ? 'Создаю…' : '🏠 Создать общий дом'}
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      ) : null}
+
+      {/* Режим (локальный — недоступен в общем доме, там всё по-настоящему) */}
+      {!inHome ? (
       <View style={styles.block}>
         <SectionLabel>Режим</SectionLabel>
         <View style={styles.segment}>
@@ -50,9 +106,10 @@ export function SettingsScreen() {
         </View>
         <Text style={{ fontFamily: fonts.semibold, fontSize: 12.5, color: colors.textMuted, marginTop: 10 }}>{modeHint}</Text>
       </View>
+      ) : null}
 
-      {/* Кто убирается */}
-      {isMulti ? (
+      {/* Кто убирается (локальные участники; в общем доме — реальные люди выше) */}
+      {!inHome && isMulti ? (
         <View style={styles.block}>
           <SectionLabel>Кто убирается</SectionLabel>
           {state.members.map((m) => {
@@ -156,4 +213,5 @@ const styles = StyleSheet.create({
   settingLabel: { fontFamily: fonts.bold, fontSize: 14.5, color: colors.text },
   linkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: 8 },
+  inviteBtn: { backgroundColor: colors.sage, borderRadius: 14, paddingVertical: 13, alignItems: 'center' },
 });

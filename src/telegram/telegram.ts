@@ -12,6 +12,8 @@ export interface TgWebApp {
   initDataUnsafe?: { start_param?: string; user?: { id: number; first_name: string } };
   openTelegramLink?: (url: string) => void;
   openInvoice?: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void;
+  version?: string;
+  isVersionAtLeast?: (v: string) => boolean;
   disableVerticalSwipes?: () => void;
   setHeaderColor?: (c: string) => void;
   setBackgroundColor?: (c: string) => void;
@@ -148,8 +150,21 @@ export function openTelegramLink(url: string): boolean {
 
 const CHUNK = 3800; // запас от лимита 4096
 
+// Старые клиенты Telegram не отвечают на CloudStorage-запросы (колбэк не
+// зовётся вообще) — поэтому: (1) версия ≥ 6.9, (2) таймаут на каждую операцию.
 function cloud(): NonNullable<TgWebApp['CloudStorage']> | null {
-  return getWA()?.CloudStorage ?? null;
+  const wa = getWA();
+  if (!wa?.CloudStorage) return null;
+  try {
+    if (wa.isVersionAtLeast && !wa.isVersionAtLeast('6.9')) return null;
+  } catch {
+    return null;
+  }
+  return wa.CloudStorage;
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
 }
 
 export function hasCloudStorage(): boolean {
@@ -161,37 +176,48 @@ export function cloudSave(key: string, json: string): Promise<boolean> {
   if (!cs) return Promise.resolve(false);
   const chunks: string[] = [];
   for (let i = 0; i < json.length; i += CHUNK) chunks.push(json.slice(i, i + CHUNK));
-  return new Promise((resolve) => {
-    let pending = chunks.length + 1;
-    let failed = false;
-    const done = (err: unknown) => {
-      if (err) failed = true;
-      if (--pending === 0) resolve(!failed);
-    };
-    cs.setItem(`${key}_meta`, String(chunks.length), done);
-    chunks.forEach((c, i) => cs.setItem(`${key}_${i}`, c, done));
+  const op = new Promise<boolean>((resolve) => {
+    try {
+      let pending = chunks.length + 1;
+      let failed = false;
+      const done = (err: unknown) => {
+        if (err) failed = true;
+        if (--pending === 0) resolve(!failed);
+      };
+      cs.setItem(`${key}_meta`, String(chunks.length), done);
+      chunks.forEach((c, i) => cs.setItem(`${key}_${i}`, c, done));
+    } catch {
+      resolve(false);
+    }
   });
+  return withTimeout(op, 4000, false);
 }
 
 export function cloudLoad(key: string): Promise<string | null> {
   const cs = cloud();
   if (!cs) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    cs.getItem(`${key}_meta`, (err, metaVal) => {
-      if (err || !metaVal) return resolve(null);
-      const n = parseInt(metaVal, 10);
-      if (!Number.isFinite(n) || n <= 0) return resolve(null);
-      const keys = Array.from({ length: n }, (_, i) => `${key}_${i}`);
-      cs.getItems(keys, (err2, values) => {
-        if (err2 || !values) return resolve(null);
-        let out = '';
-        for (let i = 0; i < n; i++) {
-          const part = values[`${key}_${i}`];
-          if (part == null) return resolve(null); // неполный сейв — не доверяем
-          out += part;
-        }
-        resolve(out);
+  const op = new Promise<string | null>((resolve) => {
+    try {
+      cs.getItem(`${key}_meta`, (err, metaVal) => {
+        if (err || !metaVal) return resolve(null);
+        const n = parseInt(metaVal, 10);
+        if (!Number.isFinite(n) || n <= 0) return resolve(null);
+        const keys = Array.from({ length: n }, (_, i) => `${key}_${i}`);
+        cs.getItems(keys, (err2, values) => {
+          if (err2 || !values) return resolve(null);
+          let out = '';
+          for (let i = 0; i < n; i++) {
+            const part = values[`${key}_${i}`];
+            if (part == null) return resolve(null); // неполный сейв — не доверяем
+            out += part;
+          }
+          resolve(out);
+        });
       });
-    });
+    } catch {
+      resolve(null);
+    }
   });
+  // Клиент не ответил за 2.5с — работаем с локальным сейвом.
+  return withTimeout(op, 2500, null);
 }

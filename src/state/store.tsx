@@ -240,6 +240,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // --- Гидрация: CloudStorage Telegram → localStorage → сид ---
   useEffect(() => {
+    // Страховка: что бы ни зависло (старый клиент, сеть) — открываемся максимум через 4с.
+    const guard = setTimeout(() => {
+      if (!dead.current) {
+        setHydrated(true);
+        advanceToToday();
+      }
+    }, 4000);
     (async () => {
       try {
         let raw: string | null = null;
@@ -261,10 +268,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // игнорируем — стартуем с сидом
       }
+      clearTimeout(guard);
       setHydrated(true);
       advanceToToday();
     })();
     return () => {
+      clearTimeout(guard);
       dead.current = true;
       if (timerInt.current) clearInterval(timerInt.current);
       if (sparksRaf.current) cancelAnimationFrame(sparksRaf.current);

@@ -23,7 +23,7 @@ import type {
 } from '../data/types';
 import { achievements, computeDue, daysSince, levelOf, overallClean, assignee, reward as rewardFn } from '../engine/engine';
 import { todayIndex } from '../engine/time';
-import { apiHomeCreate, apiHomeJoin, apiHomeSync, apiReminder, apiStarsClaim, apiStarsInvoice, HomeMemberDoc } from '../telegram/api';
+import { apiHomeCreate, apiHomeJoin, apiHomeNudge, apiHomeSync, apiReminder, apiStarsClaim, apiStarsInvoice, HomeMemberDoc } from '../telegram/api';
 import { cloudLoad, cloudSave, getInitData, isInTelegram, openInvoice, telegramHaptic } from '../telegram/telegram';
 
 const STORAGE_KEY = 'kustik.state.v1';
@@ -39,6 +39,7 @@ interface EphemeralState {
   tab: Tab;
   achToast: string | null;
   questToast: string | null;
+  infoToast: string | null;
   homeBusy: boolean; // идёт создание/вступление в общий дом
   editing: EditingTask | null;
   editingRoom: EditingRoom | null;
@@ -103,6 +104,7 @@ interface Actions {
   joinHome: (homeId: string) => void;
   leaveHome: () => void;
   buyPremium: (item: ShopItem) => void;
+  nudge: (memberId: string, memberName: string) => void;
 }
 
 const StoreContext = createContext<{ state: AppState; actions: Actions; hydrated: boolean } | null>(null);
@@ -160,6 +162,7 @@ function makeFullInitial(): AppState {
     tab: 'today',
     achToast: null,
     questToast: null,
+    infoToast: null,
     homeBusy: false,
     editing: null,
     editingRoom: null,
@@ -453,6 +456,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const leaveHome = useCallback(() => {
     setState((s) => ({ ...s, homeId: null, homeRev: 0, mode: 'one', members: [], me: 'm1', filter: 'all' }));
   }, []);
+
+  const showInfo = useCallback((msg: string) => {
+    setState((s) => ({ ...s, infoToast: msg }));
+    setTimeout(() => {
+      if (!dead.current) setState((s) => ({ ...s, infoToast: null }));
+    }, 2600);
+  }, []);
+
+  const nudge = useCallback(
+    (memberId: string, memberName: string) => {
+      const s = stateRef.current;
+      if (!s.homeId) return;
+      telegramHaptic('light');
+      (async () => {
+        const res = await apiHomeNudge(s.homeId!, memberId);
+        if (!res || !res.ok) showInfo('Не получилось подтолкнуть 🙈');
+        else if (res.throttled) showInfo(`${memberName} недавно уже получил(а) пинок 😴`);
+        else showInfo(`Подтолкнул(а) ${memberName} 👋`);
+      })();
+    },
+    [showInfo]
+  );
 
   // --- Telegram Stars: покупка премиум-товара ---
   const equipPremium = useCallback((item: ShopItem) => {
@@ -922,7 +947,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     saveRoom, nextDay, setMode, addMember, removeMember, renameMember, setMe, setFilter, setReminderHour,
     toggleReminder, snooze, toggleExpress, openShop, closeShop, openAch, closeAch, buyEquip, toggleFreeze,
     startTimer, pauseTimer, setTimerMins, closeTimer, finishTimer, complete, toggleRoom, closeCelebration,
-    openSoon, closeSoon, resetAll, completeOnboarding, createHome, joinHome, leaveHome, buyPremium,
+    openSoon, closeSoon, resetAll, completeOnboarding, createHome, joinHome, leaveHome, buyPremium, nudge,
   };
 
   return <StoreContext.Provider value={{ state, actions, hydrated }}>{children}</StoreContext.Provider>;

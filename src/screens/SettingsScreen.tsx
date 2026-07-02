@@ -64,7 +64,11 @@ export function SettingsScreen() {
                     <View style={[styles.meChip, styles.meChipActive]}>
                       <Text style={{ fontFamily: fonts.extrabold, fontSize: 11, color: colors.sageDark }}>это ты</Text>
                     </View>
-                  ) : null}
+                  ) : (
+                    <Pressable onPress={() => actions.nudge(m.id, m.name)} style={styles.nudgeBtn}>
+                      <Text style={{ fontFamily: fonts.extrabold, fontSize: 11.5, color: colors.primaryDeep }}>👋 Подтолкнуть</Text>
+                    </Pressable>
+                  )}
                 </View>
               ))}
               <Pressable onPress={invite} style={styles.inviteBtn}>
@@ -216,4 +220,5 @@ const styles = StyleSheet.create({
   linkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: 8 },
   inviteBtn: { backgroundColor: colors.sage, borderRadius: 14, paddingVertical: 13, alignItems: 'center' },
+  nudgeBtn: { borderWidth: 1.5, borderColor: 'rgba(197,106,75,0.35)', borderRadius: 999, paddingVertical: 5, paddingHorizontal: 11 },
 });

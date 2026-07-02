@@ -9,12 +9,12 @@ export function LevelToast() {
   const { state } = useStore();
   const insets = useSafeAreaInsets();
   const anim = useRef(new Animated.Value(0)).current;
-  // Приоритет: уровень > достижение > квест.
+  // Приоритет: уровень > достижение > квест > инфо.
   const text = state.levelUpName
     ? `🎉 Новый уровень: ${state.levelUpName}`
     : state.achToast
     ? `🏅 Достижение: ${state.achToast}`
-    : state.questToast || null;
+    : state.questToast || state.infoToast || null;
   const visible = !!text;
 
   useEffect(() => {

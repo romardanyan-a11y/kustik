@@ -56,6 +56,10 @@ export function apiHomeSync(homeId: string, baseRev: number, state?: Record<stri
   return post<SyncResult>('/api/home/sync', state ? { homeId, baseRev, state } : { homeId });
 }
 
+export function apiHomeNudge(homeId: string, targetId: string): Promise<{ ok: boolean; throttled?: boolean } | null> {
+  return post('/api/home/nudge', { homeId, targetId });
+}
+
 // --- Telegram Stars ---
 export function apiStarsInvoice(itemId: string): Promise<{ ok: boolean; link?: string; alreadyOwned?: boolean } | null> {
   return post('/api/stars/invoice', { itemId });

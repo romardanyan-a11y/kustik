@@ -4,6 +4,20 @@ export interface Env {
   KV: KVNamespace;
   BOT_TOKEN: string;
   CRON_SECRET: string;
+  // Необязательный отдельный секрет для secret_token вебхука.
+  // Если не задан — используется CRON_SECRET (обратная совместимость).
+  WEBHOOK_SECRET?: string;
+}
+
+// Секрет, которым подписан вебхук Telegram (header x-telegram-bot-api-secret-token).
+export const webhookSecret = (env: Env): string => env.WEBHOOK_SECRET || env.CRON_SECRET;
+
+// Сравнение строк за постоянное время (защита от timing-атак на подпись).
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 // Минимальные типы Cloudflare KV (без @cloudflare/workers-types,
@@ -66,7 +80,7 @@ export async function validateInitData(initData: string, botToken: string): Prom
       .join('\n');
     const secret = await hmacSha256(enc.encode('WebAppData'), botToken);
     const calc = hex(await hmacSha256(secret, dataCheck));
-    if (calc !== hash) return null;
+    if (!timingSafeEqual(calc, hash)) return null;
     // Свежесть: не старше 24 часов.
     const authDate = parseInt(params.get('auth_date') || '0', 10);
     if (!authDate || Date.now() / 1000 - authDate > 86400) return null;

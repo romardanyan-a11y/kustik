@@ -181,6 +181,16 @@ export function SettingsScreen() {
           </View>
           <Toggle value={state.autoFreeze} onToggle={actions.toggleFreeze} activeColor={colors.blue} />
         </View>
+        <View style={styles.divider} />
+        <View style={styles.settingRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.settingLabel}>🏝 Пауза · в отъезде</Text>
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 11.5, color: colors.textMuted, marginTop: 3 }}>
+              {state.vacation ? 'Время на паузе — кустик тебя ждёт 💤' : 'Дела не копятся, серия цела'}
+            </Text>
+          </View>
+          <Toggle value={state.vacation} onToggle={actions.toggleVacation} activeColor="#9B7FB0" />
+        </View>
       </View>
 
       {/* Кустик */}

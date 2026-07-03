@@ -95,6 +95,8 @@ export function makeInitialState(today: number): PersistentState {
     purchasesCount: 0,
     earlyBird: false,
     nightOwl: false,
+    vacation: false,
+    dayShift: 0,
   };
 }
 

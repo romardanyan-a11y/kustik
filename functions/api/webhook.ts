@@ -1,5 +1,6 @@
-// Вебхук Telegram-бота: /start, /help.
-import { Env, PagesContext, err, json, tg } from './_utils';
+// Вебхук Telegram-бота: /start, /help, платежи Stars.
+import { Env, PagesContext, err, json, tg, timingSafeEqual, webhookSecret } from './_utils';
+import { PREMIUM_CATALOG } from './stars/invoice';
 
 const APP_URL = 'https://kustik.pages.dev';
 
@@ -23,8 +24,9 @@ interface TgUpdate {
 export const onRequestPost = async (ctx: PagesContext): Promise<Response> => {
   const { request, env } = ctx;
   // Telegram подписывает вебхук заголовком-секретом (задаётся в setWebhook).
-  const secret = request.headers.get('x-telegram-bot-api-secret-token');
-  if (!env.CRON_SECRET || secret !== env.CRON_SECRET) return err('forbidden', 403);
+  const secret = request.headers.get('x-telegram-bot-api-secret-token') || '';
+  const expected = webhookSecret(env);
+  if (!expected || !timingSafeEqual(secret, expected)) return err('forbidden', 403);
 
   let update: TgUpdate;
   try {
@@ -43,10 +45,14 @@ export const onRequestPost = async (ctx: PagesContext): Promise<Response> => {
   }
   // --- Telegram Stars: фиксируем успешную покупку ---
   if (update.message?.successful_payment) {
-    const payload = update.message.successful_payment.invoice_payload || '';
+    const pay = update.message.successful_payment;
+    const payload = pay.invoice_payload || '';
     const [userId, itemId] = payload.split(':');
-    if (userId && itemId) {
-      await env.KV.put(`star:${userId}:${itemId}`, JSON.stringify({ at: Date.now(), amount: update.message.successful_payment.total_amount }));
+    const item = PREMIUM_CATALOG[itemId];
+    // Строго: товар из каталога, валюта Stars, сумма совпадает, id пользователя — число.
+    const valid = !!userId && /^\d+$/.test(userId) && !!item && pay.currency === 'XTR' && pay.total_amount === item.stars;
+    if (valid) {
+      await env.KV.put(`star:${userId}:${itemId}`, JSON.stringify({ at: Date.now(), amount: pay.total_amount }));
       await tg(env.BOT_TOKEN, 'sendMessage', {
         chat_id: update.message.chat.id,
         text: 'Покупка получена! Открой Кустик — обновка уже ждёт 🌟',

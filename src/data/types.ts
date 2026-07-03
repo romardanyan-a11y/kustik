@@ -105,6 +105,10 @@ export interface PersistentState {
   purchasesCount: number; // покупок в магазине
   earlyBird: boolean; // закрывал дело до 9 утра
   nightOwl: boolean; // закрывал дело после 22
+  // Режим «Пауза / В отъезде»: время заморожено, дела не копятся, серия цела.
+  vacation: boolean;
+  // Сколько реальных дней «съедено» паузами — сдвиг между реальным и игровым днём.
+  dayShift: number;
 }
 
 export interface ShopItem {

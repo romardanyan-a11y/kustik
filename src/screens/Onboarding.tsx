@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Plant } from '../components/Plant';
+import { PettablePlant } from '../components/PettablePlant';
 import { SEED_ROOMS } from '../data/seed';
 import { useStore } from '../state/store';
 import { colors, fonts, radius, shadows } from '../theme/tokens';
@@ -27,7 +27,7 @@ export function Onboarding() {
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         {step === 0 && (
           <>
-            <Plant bloom={0.78} potSkin="terracotta" outfit="none" levelIdx={0} pop={false} />
+            <PettablePlant bloom={0.78} potSkin="terracotta" outfit="none" levelIdx={0} pop={false} />
             <Text style={styles.hello}>Привет, я Кустик!</Text>
             <Text style={styles.text}>
               Я цвету, когда дома чисто, и грущу, когда всё запущено.{'\n'}Помогай мне по чуть-чуть — каждый день.

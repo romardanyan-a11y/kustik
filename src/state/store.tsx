@@ -88,6 +88,7 @@ interface Actions {
   closeAch: () => void;
   buyEquip: (item: ShopItem) => void;
   toggleFreeze: () => void;
+  toggleVacation: () => void;
   startTimer: (id: string, mins: number) => void;
   pauseTimer: () => void;
   setTimerMins: (mins: number) => void;
@@ -115,6 +116,7 @@ const PERSISTENT_KEYS: (keyof PersistentState)[] = [
   'outfit', 'bgTheme', 'bestClean', 'maxCombo', 'freezes', 'autoFreeze', 'uid',
   'totalDone', 'achUnlocked', 'onboarded', 'homeId', 'homeRev',
   'questBonusDay', 'cleanHistory', 'focusDone', 'purchasesCount', 'earlyBird', 'nightOwl',
+  'vacation', 'dayShift',
 ];
 
 // Что уходит в общий документ дома (household-уровень).
@@ -221,9 +223,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --- Переход на текущий день: пропущенные дни сжигают заморозки/серию ---
+  // Игровой день = реальный день − dayShift (паузы «съедают» реальные дни).
   const advanceToToday = useCallback(() => {
-    const today = todayIndex();
     setState((s) => {
+      if (s.vacation) return s; // на паузе время заморожено
+      const today = todayIndex() - s.dayShift;
       if (today <= s.dayOffset) return s;
       let streak = s.streak;
       let freezes = s.freezes;
@@ -543,9 +547,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated || !isInTelegram()) return;
     if (remTimer.current) clearTimeout(remTimer.current);
     remTimer.current = setTimeout(() => {
-      apiReminder(stateRef.current.reminderOn, stateRef.current.reminderHour);
+      // На паузе напоминания молчат.
+      apiReminder(stateRef.current.reminderOn && !stateRef.current.vacation, stateRef.current.reminderHour);
     }, 800);
-  }, [hydrated, state.reminderOn, state.reminderHour]);
+  }, [hydrated, state.reminderOn, state.reminderHour, state.vacation]);
 
   // --- Анимация счётчика искр ---
   // Важно: sparks (источник истины) меняется мгновенно в действиях;
@@ -728,6 +733,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const setReminderHour = useCallback((h: number) => setState((s) => ({ ...s, reminderHour: ((h % 24) + 24) % 24 })), []);
   const toggleReminder = useCallback(() => setState((s) => ({ ...s, reminderOn: !s.reminderOn })), []);
   const toggleFreeze = useCallback(() => setState((s) => ({ ...s, autoFreeze: !s.autoFreeze })), []);
+  const toggleVacation = useCallback(() => {
+    setState((s) => {
+      if (!s.vacation) return { ...s, vacation: true }; // включаем — замораживаем время
+      // выключаем — прошедшие реальные дни поглощаем в dayShift, чтобы дела не свалились
+      return { ...s, vacation: false, dayShift: todayIndex() - s.dayOffset };
+    });
+  }, []);
 
   const snooze = useCallback(() => {
     setState((s) => {
@@ -945,7 +957,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const actions: Actions = {
     setTab, openEdit, newTask, editPatch, closeEdit, saveEdit, deleteTask, newRoom, patchRoom, closeRoom,
     saveRoom, nextDay, setMode, addMember, removeMember, renameMember, setMe, setFilter, setReminderHour,
-    toggleReminder, snooze, toggleExpress, openShop, closeShop, openAch, closeAch, buyEquip, toggleFreeze,
+    toggleReminder, snooze, toggleExpress, openShop, closeShop, openAch, closeAch, buyEquip, toggleFreeze, toggleVacation,
     startTimer, pauseTimer, setTimerMins, closeTimer, finishTimer, complete, toggleRoom, closeCelebration,
     openSoon, closeSoon, resetAll, completeOnboarding, createHome, joinHome, leaveHome, buyPremium, nudge,
   };

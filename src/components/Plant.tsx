@@ -1,10 +1,13 @@
 // «Кустик» — растение-питомец. SVG viewBox 0 0 200 220, параметризуется bloom (0..1).
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing } from 'react-native';
-import Svg, { Circle, Defs, Ellipse, G, Path, RadialGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, RadialGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { POT_SKINS } from '../data/seed';
 import { lerpColor, ss } from '../engine/engine';
 import { useTween } from '../hooks/useTween';
+
+// Осветлить/затемнить hex-цвет (t>0 → к белому, t<0 → к чёрному).
+const shade = (hex: string, t: number) => lerpColor(hex, t >= 0 ? '#FFFFFF' : '#000000', Math.abs(t));
 
 const ASvg = Animated.createAnimatedComponent(Svg);
 
@@ -46,11 +49,31 @@ export function Plant({ bloom, potSkin, outfit, levelIdx, pop, width = 188, heig
     }
   }, [pop, popScale]);
 
+  // Моргание — раз в ~3.8с глазки на миг закрываются.
+  const [blink, setBlink] = useState(false);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>;
+    const iv = setInterval(() => {
+      setBlink(true);
+      t = setTimeout(() => setBlink(false), 130);
+    }, 3800);
+    return () => {
+      clearInterval(iv);
+      clearTimeout(t);
+    };
+  }, []);
+
   const rotate = sway.interpolate({ inputRange: [-1, 1], outputRange: ['-1.7deg', '1.7deg'] });
 
   const leafCol = lerpColor('#AC9A5C', '#6E9C63', ssb);
+  const leafLight = lerpColor('#C9BD86', '#93C085', ssb);
+  const leafVein = lerpColor('#8A7A48', '#4E7A45', ssb);
   const stemCol = lerpColor('#9D876A', '#5E8A4F', ssb);
   const pf = POT_SKINS[potSkin] || POT_SKINS.terracotta;
+  const potLight = shade(pf[0], 0.2);
+  const potDark = shade(pf[0], -0.16);
+  const rimLight = shade(pf[1], 0.18);
+  const rimDark = shade(pf[1], -0.12);
 
   // Параметры листа: порог появления и угол.
   const leafProps = (thr: number, rot: number) => {
@@ -108,6 +131,19 @@ export function Plant({ bloom, potSkin, outfit, levelIdx, pop, width = 188, heig
             <Stop offset="55%" stopColor="#EAD6A8" stopOpacity="0.4" />
             <Stop offset="100%" stopColor="#EAD6A8" stopOpacity="0" />
           </RadialGradient>
+          <LinearGradient id="leafGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0%" stopColor={leafLight} />
+            <Stop offset="100%" stopColor={leafCol} />
+          </LinearGradient>
+          <LinearGradient id="potGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0%" stopColor={potLight} />
+            <Stop offset="55%" stopColor={pf[0]} />
+            <Stop offset="100%" stopColor={potDark} />
+          </LinearGradient>
+          <LinearGradient id="rimGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0%" stopColor={rimLight} />
+            <Stop offset="100%" stopColor={rimDark} />
+          </LinearGradient>
         </Defs>
         <Circle cx={100} cy={98} r={94} fill="url(#plantGlow)" opacity={glowOp} />
         <Ellipse cx={100} cy={208} rx={46} ry={7} fill="rgba(74,55,40,0.10)" />
@@ -122,12 +158,20 @@ export function Plant({ bloom, potSkin, outfit, levelIdx, pop, width = 188, heig
         {/* Стебель */}
         <Path d={stemPath} stroke={stemCol} strokeWidth={5} strokeLinecap="round" fill="none" />
 
-        {/* Листья */}
+        {/* Листья — градиент + прожилка */}
         {leaves.map((lf, i) => {
           const p = leafProps(lf.thr, lf.rot);
           return (
             <G key={i} originX={lf.cx} originY={lf.cy} rotation={p.rotation} scale={p.scale} opacity={p.opacity}>
-              <Ellipse cx={lf.cx} cy={lf.cy} rx={lf.rx} ry={lf.ry} fill={leafCol} stroke="rgba(56,74,42,0.10)" strokeWidth={1} />
+              <Ellipse cx={lf.cx} cy={lf.cy} rx={lf.rx} ry={lf.ry} fill="url(#leafGrad)" stroke="rgba(56,74,42,0.12)" strokeWidth={1} />
+              <Path
+                d={`M${lf.cx - lf.rx * 0.78} ${lf.cy} Q${lf.cx} ${lf.cy + 1.4} ${lf.cx + lf.rx * 0.78} ${lf.cy}`}
+                stroke={leafVein}
+                strokeWidth={0.9}
+                strokeLinecap="round"
+                fill="none"
+                opacity={0.5}
+              />
             </G>
           );
         })}
@@ -163,14 +207,27 @@ export function Plant({ bloom, potSkin, outfit, levelIdx, pop, width = 188, heig
           🦋
         </SvgText>
 
-        {/* Горшок */}
-        <Path d="M70 150 L130 150 L122 202 Q121 206 117 206 L83 206 Q79 206 78 202 Z" fill={pf[0]} />
-        <Path d="M76 152 L83 152 L79 201 L74 200 Z" fill="rgba(255,255,255,0.13)" />
-        <Rect x={64} y={143} width={72} height={13} rx={6.5} fill={pf[1]} />
+        {/* Горшок — градиентное тело, глянцевый блик и тень у дна */}
+        <Path d="M70 150 L130 150 L122 202 Q121 206 117 206 L83 206 Q79 206 78 202 Z" fill="url(#potGrad)" />
+        <Path d="M75 151 L84 151 L80 202 L73 200 Z" fill="rgba(255,255,255,0.18)" />
+        <Path d="M83 206 L117 206 Q121 206 122 202 L120 196 Q100 201 80 196 L78 202 Q79 206 83 206 Z" fill="rgba(0,0,0,0.08)" />
+        <Rect x={64} y={143} width={72} height={13} rx={6.5} fill="url(#rimGrad)" />
+        <Rect x={68} y={144.5} width={64} height={2.6} rx={1.3} fill="rgba(255,255,255,0.22)" />
 
         {/* Лицо */}
-        <Circle cx={90} cy={174} r={3.7} fill="#4A3328" />
-        <Circle cx={110} cy={174} r={3.7} fill="#4A3328" />
+        {blink ? (
+          <>
+            <Path d="M86 174 Q90 176.4 94 174" stroke="#4A3328" strokeWidth={2.2} fill="none" strokeLinecap="round" />
+            <Path d="M106 174 Q110 176.4 114 174" stroke="#4A3328" strokeWidth={2.2} fill="none" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <Circle cx={90} cy={174} r={3.9} fill="#4A3328" />
+            <Circle cx={110} cy={174} r={3.9} fill="#4A3328" />
+            <Circle cx={88.8} cy={172.7} r={1.15} fill="#FFFFFF" opacity={0.9} />
+            <Circle cx={108.8} cy={172.7} r={1.15} fill="#FFFFFF" opacity={0.9} />
+          </>
+        )}
         <Circle cx={80} cy={183} r={5} fill="#E98AA6" opacity={cheekOp} />
         <Circle cx={120} cy={183} r={5} fill="#E98AA6" opacity={cheekOp} />
         <Path d={mouthD} stroke="#4A3328" strokeWidth={2.6} fill="none" strokeLinecap="round" />

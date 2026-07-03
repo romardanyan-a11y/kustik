@@ -3,7 +3,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Polyline } from 'react-native-svg';
-import { Plant } from '../components/Plant';
+import { PettablePlant } from '../components/PettablePlant';
 import { QUEST_BONUS, QUEST_GOAL } from '../data/seed';
 import { TaskCard } from '../components/TaskCard';
 import { SlidersIcon } from '../components/icons';
@@ -94,6 +94,17 @@ export function TodayScreen() {
         </View>
       </View>
 
+      {/* Баннер паузы */}
+      {state.vacation ? (
+        <Pressable onPress={() => actions.setTab('settings')} style={styles.vacationBanner}>
+          <Text style={{ fontSize: 18 }}>🏝</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: fonts.extrabold, fontSize: 13.5, color: '#6B4E86' }}>Пауза включена</Text>
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 11.5, color: '#8A72A3' }}>Время заморожено — серия и дела в целости</Text>
+          </View>
+        </Pressable>
+      ) : null}
+
       {/* Кнопка «Гости на пороге» */}
       <Pressable onPress={actions.toggleExpress} style={styles.guestBtn}>
         <Text style={{ fontSize: 18 }}>🔔</Text>
@@ -114,13 +125,15 @@ export function TodayScreen() {
             <Text style={{ fontSize: 19 }}>💤</Text>
           </View>
         ) : null}
-        <Plant bloom={cleanPct / 100} potSkin={state.potSkin} outfit={state.outfit} levelIdx={levelIndex(state)} pop={state.plantPop} />
+        <PettablePlant bloom={cleanPct / 100} potSkin={state.potSkin} outfit={state.outfit} levelIdx={levelIndex(state)} pop={state.plantPop} />
         <Text style={styles.cleanCaption}>чистота дома</Text>
         <Text style={styles.cleanNumber}>
           {cleanPct}
           <Text style={{ fontSize: 24 }}>%</Text>
         </Text>
-        <Text style={styles.quip}>{sleepy ? 'Кустик задремал — дела спокойно ждут до утра' : quip(cleanPct)}</Text>
+        <Text style={styles.quip}>
+          {state.vacation ? 'Пауза — кустик отдыхает и ждёт тебя 🏝' : sleepy ? 'Кустик задремал — дела спокойно ждут до утра' : quip(cleanPct)}
+        </Text>
 
         {/* Бейдж уровня */}
         <View style={styles.levelPill}>
@@ -354,6 +367,17 @@ const styles = StyleSheet.create({
   },
   upAvatar: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   weekCard: { backgroundColor: '#FBF4EA', borderRadius: 18, padding: 16, marginTop: 22, borderWidth: 1, borderColor: colors.borderSoft },
+  vacationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#EFE7F5',
+    borderWidth: 1,
+    borderColor: 'rgba(155,127,176,0.35)',
+    borderRadius: 15,
+    padding: 12,
+    marginBottom: 14,
+  },
   shareBtn: {
     alignSelf: 'center',
     marginTop: 16,
